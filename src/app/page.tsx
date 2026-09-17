@@ -6,19 +6,8 @@ type View = 'overview' | 'intake' | 'quotes' | 'jobs' | 'customers' | 'settings'
 type QuoteStatus = 'Draft' | 'Ready to send';
 type JobStatus = 'Ready to schedule' | 'Scheduled' | 'Completed';
 
-type BriefRecord = {
-  id: string;
-  inquiry: string;
-  result: string;
-  createdAt: number;
-  model: string;
-};
-
-type BriefSection = {
-  title: string;
-  items: string[];
-};
-
+type BriefRecord = { id: string; inquiry: string; result: string; createdAt: number; model: string };
+type BriefSection = { title: string; items: string[] };
 type QuoteRecord = {
   id: string;
   number: string;
@@ -33,43 +22,19 @@ type QuoteRecord = {
   cleaningDate: string;
   relatedDate: string;
   accessDetails: string[];
+  constraintItems: string[];
+  followUpItems: string[];
+  checkedFollowUps: string[];
   basePrice: string;
   extras: string;
   note: string;
   terms: string;
   status: QuoteStatus;
-  checkedFollowUps: string[];
 };
+type JobRecord = { id: string; quoteId: string; quoteNumber: string; createdAt: number; updatedAt: number; customerName: string; propertySummary: string; serviceSummary: string; cleaningDate: string; status: JobStatus };
+type Settings = { businessName: string; email: string; phone: string; currency: string; terms: string; defaultNote: string };
 
-type JobRecord = {
-  id: string;
-  quoteId: string;
-  quoteNumber: string;
-  createdAt: number;
-  updatedAt: number;
-  customerName: string;
-  propertySummary: string;
-  serviceSummary: string;
-  cleaningDate: string;
-  status: JobStatus;
-};
-
-type Settings = {
-  businessName: string;
-  email: string;
-  phone: string;
-  currency: string;
-  terms: string;
-  defaultNote: string;
-};
-
-const STORAGE = {
-  briefs: 'tasktuck-brief-records',
-  quotes: 'tasktuck-quotes',
-  jobs: 'tasktuck-jobs',
-  settings: 'tasktuck-settings',
-};
-
+const STORAGE = { briefs: 'tasktuck-brief-records', quotes: 'tasktuck-quotes', jobs: 'tasktuck-jobs', settings: 'tasktuck-settings' };
 const DEFAULT_SETTINGS: Settings = {
   businessName: 'TaskTuck',
   email: '',
@@ -78,91 +43,43 @@ const DEFAULT_SETTINGS: Settings = {
   terms: 'Pricing is based on the scope reviewed. Any material change in scope may require a revised quote.',
   defaultNote: 'Thanks for reaching out. We reviewed the cleaning details you sent over and prepared the quote below.',
 };
-
 const SAMPLES = [
-  {
-    label: 'Move-out',
-    text: 'Hi, I am moving out of my 2 bedroom apartment on October 4th. It is about 1,100 sq ft and mostly empty. I need the kitchen, bathrooms, floors, and inside of the cabinets done. The building has a concierge and there is a loading zone downstairs. Ideally sometime in the morning on October 3rd.',
-  },
-  {
-    label: 'Office',
-    text: 'We run a small 6-person design office, around 1,800 sq ft. We are looking for cleaning every Tuesday and Friday after 6pm. Two bathrooms, kitchenette, open workspace and a couple of meeting rooms. We can provide keys to the cleaner.',
-  },
-  {
-    label: 'Deep clean',
-    text: 'Looking for a deep clean before family visits. Three bedroom house, two bathrooms, lots of pet hair, and the oven needs attention. The house is occupied and we would prefer Saturday afternoon. Can you let me know what you would need from us to quote it?',
-  },
+  { label: 'Move-out', text: 'Hi, I am moving out of my 2 bedroom apartment on October 4th. It is about 1,100 sq ft and mostly empty. I need the kitchen, bathrooms, floors, and inside of the cabinets done. The building has a concierge and there is a loading zone downstairs. Ideally sometime in the morning on October 3rd.' },
+  { label: 'Office', text: 'We run a small 6-person design office, around 1,800 sq ft. We are looking for cleaning every Tuesday and Friday after 6pm. Two bathrooms, kitchenette, open workspace and a couple of meeting rooms. We can provide keys to the cleaner.' },
+  { label: 'Deep clean', text: 'Looking for a deep clean before family visits. Three bedroom house, two bathrooms, lots of pet hair, and the oven needs attention. The house is occupied and we would prefer Saturday afternoon. Can you let me know what you would need from us to quote it?' },
 ];
-
 const BRIEF_SECTIONS = ['Customer', 'Property', 'Service scope', 'Timing & access', 'Constraints & signals', 'Follow-up checklist'];
 
-function getJobLabel(inquiry: string) {
-  const firstLine = inquiry.split('\n').map((line) => line.trim()).find(Boolean);
-  if (!firstLine) return 'Untitled inquiry';
-  return firstLine.length > 52 ? `${firstLine.slice(0, 52)}…` : firstLine;
-}
-
-function formatTime(timestamp: number) {
-  return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function formatDate(timestamp: number) {
-  return new Date(timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function parseBrief(result: string): BriefSection[] {
-  const sections: BriefSection[] = [];
-  let current: BriefSection | null = null;
-
-  for (const rawLine of result.split(/\r?\n/)) {
-    const heading = rawLine.match(/^##\s+(.+)$/)?.[1]?.trim();
-    if (heading) {
-      current = { title: heading, items: [] };
-      sections.push(current);
-      continue;
-    }
-
-    const line = rawLine.replace(/^\s*[-*]\s?/, '').trim();
-    if (current && line) current.items.push(line);
-  }
-
-  return sections.length > 0
-    ? sections
-    : [{ title: 'Operations brief', items: result.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) }];
-}
-
-function getSection(sections: BriefSection[], title: string) {
-  return sections.find((section) => section.title.toLowerCase() === title.toLowerCase());
-}
-
+function formatTime(timestamp: number) { return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+function formatDate(timestamp: number) { return new Date(timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }); }
+function present(value: string) { return value.trim() ? value : 'Missing'; }
+function cleanItem(value: string) { return value.replace(/^\s*[-*]\s?/, '').replace(/\bNot provided\b/gi, 'Missing').trim(); }
 function valueAfterLabel(items: string[], label: string) {
   const match = items.find((item) => item.toLowerCase().startsWith(`${label.toLowerCase()}:`));
   return match ? match.slice(label.length + 1).trim() : '';
 }
-
-function cleanItem(value: string) {
-  return value.replace(/^\s*[-*]\s?/, '').replace(/\bNot provided\b/gi, 'Missing').trim();
+function parseBrief(result: string): BriefSection[] {
+  const sections: BriefSection[] = [];
+  let current: BriefSection | null = null;
+  for (const rawLine of result.split(/\r?\n/)) {
+    const heading = rawLine.match(/^##\s+(.+)$/)?.[1]?.trim();
+    if (heading) { current = { title: heading, items: [] }; sections.push(current); continue; }
+    const line = rawLine.replace(/^\s*[-*]\s?/, '').trim();
+    if (current && line) current.items.push(line);
+  }
+  return sections.length ? sections : [{ title: 'Operations brief', items: result.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) }];
 }
-
+function getSection(sections: BriefSection[], title: string) { return sections.find((section) => section.title.toLowerCase() === title.toLowerCase()); }
 function getContactFromInquiry(inquiry: string) {
   const email = inquiry.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || '';
   const phone = inquiry.match(/(?:\+?\d[\d\s().-]{7,}\d)/)?.[0]?.trim() || '';
   return { email, phone };
 }
-
 function nextQuoteNumber(quotes: QuoteRecord[]) {
-  const highest = quotes.reduce((max, quote) => {
-    const match = quote.number.match(/(\d+)$/);
-    return Math.max(max, match ? Number(match[1]) : 0);
-  }, 0);
+  const highest = quotes.reduce((max, quote) => Math.max(max, Number(quote.number.match(/(\d+)$/)?.[1] || 0)), 0);
   return `TT-${String(highest + 1).padStart(4, '0')}`;
 }
-
-function present(value: string) {
-  return value.trim() ? value : 'Missing';
-}
-
-function formatMoney(value: string | number, currency: string) {
+function money(value: string | number, currency: string) {
   const amount = typeof value === 'number' ? value : Number.parseFloat(value) || 0;
   return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount);
 }
@@ -186,23 +103,10 @@ function Icon({ name }: { name: 'overview' | 'inbox' | 'quote' | 'jobs' | 'custo
     search: <><circle cx="10.5" cy="10.5" r="5.5" fill="none" /><path d="m15 15 4.5 4.5" fill="none" /></>,
     print: <><path d="M6 9V4h12v5M6 17H4V10h16v7h-2" fill="none" /><path d="M7 14h10v6H7z" fill="none" /></>,
   };
-
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      {paths[name]}
-    </svg>
-  );
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
-
 function TaskTuckMark() {
-  return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white shadow-sm">
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-[22px] w-[22px]">
-        <path d="M6 7.5h12M8.5 4.5h7M8 9v7.25A3.75 3.75 0 0 0 11.75 20h.5A3.75 3.75 0 0 0 16 16.25V9" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-        <path d="M8 11.5h8" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-      </svg>
-    </div>
-  );
+  return <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white shadow-sm"><svg viewBox="0 0 24 24" aria-hidden="true" className="h-[22px] w-[22px]"><path d="M6 7.5h12M8.5 4.5h7M8 9v7.25A3.75 3.75 0 0 0 11.75 20h.5A3.75 3.75 0 0 0 16 16.25V9" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" /><path d="M8 11.5h8" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" /></svg></div>;
 }
 
 export default function Home() {
@@ -214,53 +118,37 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [lastRunAt, setLastRunAt] = useState<number | null>(null);
   const [lastModel, setLastModel] = useState('');
-  const [activeBriefId, setActiveBriefId] = useState('');
   const [briefs, setBriefs] = useState<BriefRecord[]>([]);
   const [quotes, setQuotes] = useState<QuoteRecord[]>([]);
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [activeBriefId, setActiveBriefId] = useState('');
   const [selectedQuoteId, setSelectedQuoteId] = useState('');
+  const [quoteSearch, setQuoteSearch] = useState('');
+  const [quoteStatusFilter, setQuoteStatusFilter] = useState<'All' | QuoteStatus>('All');
+  const [jobStatusFilter, setJobStatusFilter] = useState<'All' | JobStatus>('All');
+  const [customerSearch, setCustomerSearch] = useState('');
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     try {
-      const load = <T,>(key: string, fallback: T): T => {
-        const stored = window.localStorage.getItem(key);
-        return stored ? JSON.parse(stored) as T : fallback;
+      const read = <T,>(key: string, fallback: T): T => {
+        const raw = window.localStorage.getItem(key);
+        return raw ? JSON.parse(raw) as T : fallback;
       };
-      setBriefs(load<BriefRecord[]>(STORAGE.briefs, []));
-      setQuotes(load<QuoteRecord[]>(STORAGE.quotes, []));
-      setJobs(load<JobRecord[]>(STORAGE.jobs, []));
-      setSettings({ ...DEFAULT_SETTINGS, ...load<Partial<Settings>>(STORAGE.settings, {}) });
+      setBriefs(read<BriefRecord[]>(STORAGE.briefs, []));
+      setQuotes(read<QuoteRecord[]>(STORAGE.quotes, []));
+      setJobs(read<JobRecord[]>(STORAGE.jobs, []));
+      setSettings({ ...DEFAULT_SETTINGS, ...read<Partial<Settings>>(STORAGE.settings, {}) });
     } catch {
-      setBriefs([]);
-      setQuotes([]);
-      setJobs([]);
-      setSettings(DEFAULT_SETTINGS);
-    } finally {
-      setHydrated(true);
-    }
+      setBriefs([]); setQuotes([]); setJobs([]); setSettings(DEFAULT_SETTINGS);
+    } finally { setHydrated(true); }
   }, []);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    window.localStorage.setItem(STORAGE.briefs, JSON.stringify(briefs));
-  }, [briefs, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    window.localStorage.setItem(STORAGE.quotes, JSON.stringify(quotes));
-  }, [quotes, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    window.localStorage.setItem(STORAGE.jobs, JSON.stringify(jobs));
-  }, [jobs, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    window.localStorage.setItem(STORAGE.settings, JSON.stringify(settings));
-  }, [settings, hydrated]);
+  useEffect(() => { if (hydrated) try { window.localStorage.setItem(STORAGE.briefs, JSON.stringify(briefs)); } catch { /* keep workspace usable */ } }, [briefs, hydrated]);
+  useEffect(() => { if (hydrated) try { window.localStorage.setItem(STORAGE.quotes, JSON.stringify(quotes)); } catch { /* keep workspace usable */ } }, [quotes, hydrated]);
+  useEffect(() => { if (hydrated) try { window.localStorage.setItem(STORAGE.jobs, JSON.stringify(jobs)); } catch { /* keep workspace usable */ } }, [jobs, hydrated]);
+  useEffect(() => { if (hydrated) try { window.localStorage.setItem(STORAGE.settings, JSON.stringify(settings)); } catch { /* keep workspace usable */ } }, [settings, hydrated]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -274,29 +162,24 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleShortcut);
   }, [inquiry, loading, view]);
 
-  const activeBrief = briefs.find((brief) => brief.id === activeBriefId) || null;
-  const selectedQuote = quotes.find((quote) => quote.id === selectedQuoteId) || null;
   const sections = useMemo(() => parseBrief(result), [result]);
   const followUpItems = useMemo(() => getSection(sections, 'Follow-up checklist')?.items ?? [], [sections]);
   const serviceItems = useMemo(() => getSection(sections, 'Service scope')?.items ?? [], [sections]);
   const propertyItems = useMemo(() => getSection(sections, 'Property')?.items ?? [], [sections]);
   const timingItems = useMemo(() => getSection(sections, 'Timing & access')?.items ?? [], [sections]);
   const customerItems = useMemo(() => getSection(sections, 'Customer')?.items ?? [], [sections]);
-  const constraintsItems = useMemo(() => getSection(sections, 'Constraints & signals')?.items ?? [], [sections]);
+  const constraintItems = useMemo(() => getSection(sections, 'Constraints & signals')?.items ?? [], [sections]);
 
   const customerName = valueAfterLabel(customerItems, 'Name / contact details').replace(/^Missing$/i, '');
-  const propertyType = valueAfterLabel(propertyItems, 'Property type');
-  const propertySize = valueAfterLabel(propertyItems, 'Size');
-  const roomCount = valueAfterLabel(propertyItems, 'Rooms');
+  const propertySummary = [valueAfterLabel(propertyItems, 'Property type'), valueAfterLabel(propertyItems, 'Size'), valueAfterLabel(propertyItems, 'Rooms')].filter(Boolean).join(' · ');
   const cleaningDate = valueAfterLabel(timingItems, 'Requested date/time');
   const relatedDate = valueAfterLabel(timingItems, 'Requested date');
   const accessDetails = timingItems.filter((item) => /access|concierge|loading|entry|parking|keys/i.test(item));
-  const statusLabel = loading ? 'Analyzing' : result ? 'Brief ready' : 'Ready';
-
   const totalBriefs = briefs.length;
   const totalQuotes = quotes.length;
   const readyQuotes = quotes.filter((quote) => quote.status === 'Ready to send').length;
   const totalJobs = jobs.length;
+
   const customers = useMemo(() => {
     const map = new Map<string, { name: string; email: string; phone: string; quotes: number; lastActivity: number }>();
     for (const quote of quotes) {
@@ -304,463 +187,143 @@ export default function Home() {
       if (!name) continue;
       const key = name.toLowerCase();
       const current = map.get(key);
-      map.set(key, {
-        name,
-        email: quote.customerEmail || current?.email || '',
-        phone: quote.customerPhone || current?.phone || '',
-        quotes: (current?.quotes || 0) + 1,
-        lastActivity: Math.max(current?.lastActivity || 0, quote.updatedAt),
-      });
+      map.set(key, { name, email: quote.customerEmail || current?.email || '', phone: quote.customerPhone || current?.phone || '', quotes: (current?.quotes || 0) + 1, lastActivity: Math.max(current?.lastActivity || 0, quote.updatedAt) });
     }
     return Array.from(map.values()).sort((a, b) => b.lastActivity - a.lastActivity);
   }, [quotes]);
 
-  const customerDirectory = useMemo(() => {
-    return quotes.reduce<Record<string, { name: string; email: string; phone: string; quotes: number; lastActivity: number }>>((acc, quote) => {
-      const name = quote.customerName.trim();
-      if (!name) return acc;
-      const key = name.toLowerCase();
-      const current = acc[key];
-      acc[key] = {
-        name,
-        email: quote.customerEmail || current?.email || '',
-        phone: quote.customerPhone || current?.phone || '',
-        quotes: (current?.quotes || 0) + 1,
-        lastActivity: Math.max(current?.lastActivity || 0, quote.updatedAt),
-      };
-      return acc;
-    }, {});
-  }, [quotes]);
+  const filteredQuotes = useMemo(() => quotes.filter((quote) => {
+    const query = quoteSearch.trim().toLowerCase();
+    const matchesQuery = !query || [quote.number, quote.customerName, quote.propertySummary, quote.serviceItems.join(' ')].join(' ').toLowerCase().includes(query);
+    return matchesQuery && (quoteStatusFilter === 'All' || quote.status === quoteStatusFilter);
+  }), [quotes, quoteSearch, quoteStatusFilter]);
 
-  const quoteTotal = (quote: QuoteRecord) => (Number.parseFloat(quote.basePrice) || 0) + (Number.parseFloat(quote.extras) || 0);
+  const filteredJobs = useMemo(() => jobs.filter((job) => jobStatusFilter === 'All' || job.status === jobStatusFilter), [jobs, jobStatusFilter]);
+  const filteredCustomers = useMemo(() => customers.filter((customer) => !customerSearch.trim() || [customer.name, customer.email, customer.phone].join(' ').toLowerCase().includes(customerSearch.trim().toLowerCase())), [customers, customerSearch]);
 
-  const quoteReadyRequirements = selectedQuote
-    ? selectedQuote.customerName.trim() && quoteTotal(selectedQuote) > 0 && selectedQuote.checkedFollowUps.length === followUpItems.length
-    : false;
+  const selectedQuote = quotes.find((quote) => quote.id === selectedQuoteId) || null;
+  const selectedQuoteTotal = selectedQuote ? (Number.parseFloat(selectedQuote.basePrice) || 0) + (Number.parseFloat(selectedQuote.extras) || 0) : 0;
+  const quoteCanBeReady = Boolean(selectedQuote && selectedQuote.customerName.trim() && selectedQuoteTotal > 0 && selectedQuote.checkedFollowUps.length === selectedQuote.followUpItems.length);
+  const pageTitle: Record<View, string> = { overview: 'Overview', intake: 'Intake desk', quotes: selectedQuote ? selectedQuote.number : 'Quotes', jobs: 'Jobs', customers: 'Customers', settings: 'Settings' };
 
-  const navigate = (next: View) => {
-    setView(next);
-    setError('');
-    if (next !== 'quotes') setSelectedQuoteId('');
-  };
-
-  const resetIntake = () => {
-    setInquiry('');
-    setResult('');
-    setError('');
-    setCopied(false);
-    setLastRunAt(null);
-    setLastModel('');
-    setActiveBriefId('');
-    setView('intake');
-  };
+  const navigate = (next: View) => { setView(next); setError(''); if (next !== 'quotes') setSelectedQuoteId(''); };
+  const newInquiry = () => { setView('intake'); setInquiry(''); setResult(''); setError(''); setCopied(false); setLastRunAt(null); setLastModel(''); setActiveBriefId(''); setSelectedQuoteId(''); };
 
   const handleAnalyze = async (event: React.FormEvent) => {
     event.preventDefault();
     const trimmed = inquiry.trim();
     if (!trimmed || trimmed.length > 20000 || loading) return;
-
-    setLoading(true);
-    setError('');
-    setResult('');
-    setCopied(false);
-
+    setLoading(true); setError(''); setResult(''); setCopied(false);
     try {
-      const response = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiry: trimmed }),
-      });
+      const response = await fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiry: trimmed }) });
       const data: { result?: string; model?: string; error?: string } = await response.json();
       if (!response.ok) throw new Error(data.error || 'The local analysis request failed.');
-
       const now = Date.now();
-      const brief: BriefRecord = {
-        id: `${now}-${Math.random().toString(36).slice(2, 8)}`,
-        inquiry: trimmed,
-        result: data.result || 'No structured brief was returned.',
-        createdAt: now,
-        model: data.model || '',
-      };
-
-      setResult(brief.result);
-      setLastRunAt(now);
-      setLastModel(brief.model);
-      setActiveBriefId(brief.id);
+      const brief: BriefRecord = { id: `${now}-${Math.random().toString(36).slice(2, 8)}`, inquiry: trimmed, result: data.result || 'No structured brief was returned.', createdAt: now, model: data.model || '' };
+      setResult(brief.result); setLastRunAt(now); setLastModel(brief.model); setActiveBriefId(brief.id); setView('intake');
       setBriefs((current) => [brief, ...current.filter((item) => item.inquiry !== trimmed)]);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Something went wrong while processing the inquiry.');
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Something went wrong while processing the inquiry.'); }
+    finally { setLoading(false); }
   };
 
-  const openBrief = (brief: BriefRecord) => {
-    setInquiry(brief.inquiry);
-    setResult(brief.result);
-    setLastRunAt(brief.createdAt);
-    setLastModel(brief.model);
-    setActiveBriefId(brief.id);
-    setCopied(false);
-    setError('');
-    setView('intake');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  const openBrief = (brief: BriefRecord) => { setInquiry(brief.inquiry); setResult(brief.result); setLastRunAt(brief.createdAt); setLastModel(brief.model); setActiveBriefId(brief.id); setView('intake'); setError(''); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+
+  const copyText = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
+    catch { setError('Copy failed. Your browser did not allow clipboard access.'); }
   };
 
-  const handleCopy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1800);
-    } catch {
-      setError('Copy failed. Your browser did not allow clipboard access.');
-    }
+  const downloadText = (text: string, filename: string) => {
+    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
   };
 
-  const handleDownload = (quote: QuoteRecord | null = null) => {
-    const body = quote
-      ? [
-        `# ${settings.businessName} — ${quote.number}`,
-        '',
-        `Customer: ${quote.customerName || 'Missing'}`,
-        `Email: ${quote.customerEmail || 'Missing'}`,
-        `Phone: ${quote.customerPhone || 'Missing'}`,
-        `Property: ${quote.propertySummary || 'Missing'}`,
-        `Cleaning date: ${quote.cleaningDate || 'Missing'}`,
-        quote.relatedDate ? `Related date: ${quote.relatedDate}` : '',
-        '',
-        '## Services',
-        ...quote.serviceItems.map((item) => `- ${cleanItem(item)}`),
-        '',
-        `Base service: ${formatMoney(quote.basePrice, settings.currency)}`,
-        `Extras: ${formatMoney(quote.extras, settings.currency)}`,
-        `Total: ${formatMoney(quoteTotal(quote), settings.currency)}`,
-        '',
-        '## Customer note',
-        quote.note || '',
-        '',
-        '## Terms',
-        quote.terms || settings.terms,
-      ].filter(Boolean).join('\n')
-      : result;
-
-    if (!body) return;
-    const blob = new Blob([body], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = quote ? `tasktuck-${quote.number}.md` : `tasktuck-brief-${new Date().toISOString().slice(0, 10)}.md`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
+  const downloadQuote = (quote: QuoteRecord) => {
+    const text = [`# ${settings.businessName} — ${quote.number}`, '', `Customer: ${quote.customerName || 'Missing'}`, `Email: ${quote.customerEmail || 'Missing'}`, `Phone: ${quote.customerPhone || 'Missing'}`, `Property: ${quote.propertySummary || 'Missing'}`, `Cleaning date: ${quote.cleaningDate || 'Missing'}`, quote.relatedDate ? `Related date: ${quote.relatedDate}` : '', '', '## Services', ...quote.serviceItems.map((item) => `- ${cleanItem(item)}`), '', `Base service: ${money(quote.basePrice, settings.currency)}`, `Extras: ${money(quote.extras, settings.currency)}`, `Total: ${money(selectedQuoteTotal || ((Number.parseFloat(quote.basePrice) || 0) + (Number.parseFloat(quote.extras) || 0)), settings.currency)}`, '', '## Customer note', quote.note || '', '', '## Terms', quote.terms || settings.terms].filter(Boolean).join('\n');
+    downloadText(text, `tasktuck-${quote.number}.md`);
   };
 
   const createQuoteFromBrief = () => {
     if (!result) return;
-    const contact = getContactFromInquiry(inquiry);
-    const now = Date.now();
-    const quote: QuoteRecord = {
-      id: `${now}-${Math.random().toString(36).slice(2, 8)}`,
-      number: nextQuoteNumber(quotes),
-      briefId: activeBriefId,
-      createdAt: now,
-      updatedAt: now,
-      customerName: customerName.trim(),
-      customerEmail: contact.email,
-      customerPhone: contact.phone,
-      propertySummary: [propertyType, propertySize, roomCount].filter(Boolean).join(' · '),
-      serviceItems: serviceItems.filter((item) => !/^requested cleaning services:?$/i.test(item)),
-      cleaningDate,
-      relatedDate,
-      accessDetails,
-      basePrice: '',
-      extras: '',
-      note: settings.defaultNote,
-      terms: settings.terms,
-      status: 'Draft',
-      checkedFollowUps: [],
-    };
-
-    setQuotes((current) => [quote, ...current]);
-    setSelectedQuoteId(quote.id);
-    setView('quotes');
-    setError('');
+    const contact = getContactFromInquiry(inquiry); const now = Date.now();
+    const quote: QuoteRecord = { id: `${now}-${Math.random().toString(36).slice(2, 8)}`, number: nextQuoteNumber(quotes), briefId: activeBriefId, createdAt: now, updatedAt: now, customerName: customerName.trim(), customerEmail: contact.email, customerPhone: contact.phone, propertySummary, serviceItems: serviceItems.filter((item) => !/^requested cleaning services:?$/i.test(item)), cleaningDate, relatedDate, accessDetails, constraintItems: constraintItems.map(cleanItem).filter(Boolean), followUpItems: followUpItems.map(cleanItem).filter(Boolean), checkedFollowUps: [], basePrice: '', extras: '', note: settings.defaultNote, terms: settings.terms, status: 'Draft' };
+    setQuotes((current) => [quote, ...current]); setSelectedQuoteId(quote.id); setView('quotes'); setError('');
   };
 
   const updateQuote = (patch: Partial<QuoteRecord>) => {
     if (!selectedQuoteId) return;
     setQuotes((current) => current.map((quote) => quote.id === selectedQuoteId ? { ...quote, ...patch, updatedAt: Date.now(), status: patch.status || (quote.status === 'Ready to send' ? 'Draft' : quote.status) } : quote));
   };
-
-  const toggleQuoteFollowUp = (item: string) => {
-    if (!selectedQuote) return;
-    const exists = selectedQuote.checkedFollowUps.includes(item);
-    updateQuote({ checkedFollowUps: exists ? selectedQuote.checkedFollowUps.filter((value) => value !== item) : [...selectedQuote.checkedFollowUps, item] });
-  };
-
+  const toggleQuoteFollowUp = (item: string) => { if (!selectedQuote) return; updateQuote({ checkedFollowUps: selectedQuote.checkedFollowUps.includes(item) ? selectedQuote.checkedFollowUps.filter((value) => value !== item) : [...selectedQuote.checkedFollowUps, item] }); };
   const markQuoteReady = () => {
     if (!selectedQuote) return;
-    if (!selectedQuote.customerName.trim()) {
-      setError('Add a customer name before marking this quote ready.');
-      return;
-    }
-    if (quoteTotal(selectedQuote) <= 0) {
-      setError('Add a base service price before marking this quote ready.');
-      return;
-    }
-    if (selectedQuote.checkedFollowUps.length < followUpItems.length) {
-      setError('Resolve the operator checks before marking this quote ready.');
-      return;
-    }
-    updateQuote({ status: 'Ready to send' });
-    setError('');
+    if (!selectedQuote.customerName.trim()) { setError('Add a customer name before marking this quote ready.'); return; }
+    if (selectedQuoteTotal <= 0) { setError('Add a base service price before marking this quote ready.'); return; }
+    if (selectedQuote.checkedFollowUps.length < selectedQuote.followUpItems.length) { setError('Resolve the operator checks before marking this quote ready.'); return; }
+    updateQuote({ status: 'Ready to send' }); setError('');
   };
-
   const createJobFromQuote = () => {
-    if (!selectedQuote) return;
+    if (!selectedQuote || selectedQuote.status !== 'Ready to send') return;
     const existing = jobs.find((job) => job.quoteId === selectedQuote.id);
-    if (existing) {
-      setView('jobs');
-      return;
-    }
+    if (existing) { setView('jobs'); setSelectedQuoteId(''); return; }
     const now = Date.now();
-    const job: JobRecord = {
-      id: `${now}-${Math.random().toString(36).slice(2, 8)}`,
-      quoteId: selectedQuote.id,
-      quoteNumber: selectedQuote.number,
-      createdAt: now,
-      updatedAt: now,
-      customerName: selectedQuote.customerName,
-      propertySummary: selectedQuote.propertySummary,
-      serviceSummary: selectedQuote.serviceItems.map(cleanItem).filter(Boolean).slice(0, 3).join(' · '),
-      cleaningDate: selectedQuote.cleaningDate,
-      status: 'Ready to schedule',
-    };
-    setJobs((current) => [job, ...current]);
-    setView('jobs');
-    setSelectedQuoteId('');
+    const job: JobRecord = { id: `${now}-${Math.random().toString(36).slice(2, 8)}`, quoteId: selectedQuote.id, quoteNumber: selectedQuote.number, createdAt: now, updatedAt: now, customerName: selectedQuote.customerName, propertySummary: selectedQuote.propertySummary, serviceSummary: selectedQuote.serviceItems.map(cleanItem).slice(0, 3).join(' · '), cleaningDate: selectedQuote.cleaningDate, status: 'Ready to schedule' };
+    setJobs((current) => [job, ...current]); setView('jobs'); setSelectedQuoteId('');
   };
+  const updateJobStatus = (jobId: string, status: JobStatus) => setJobs((current) => current.map((job) => job.id === jobId ? { ...job, status, updatedAt: Date.now() } : job));
 
-  const updateJobStatus = (jobId: string, status: JobStatus) => {
-    setJobs((current) => current.map((job) => job.id === jobId ? { ...job, status, updatedAt: Date.now() } : job));
+  const printQuote = () => {
+    document.body.classList.add('tasktuck-printing');
+    window.setTimeout(() => { window.print(); window.setTimeout(() => document.body.classList.remove('tasktuck-printing'), 100); }, 0);
   };
 
   const navItems: { view: View; label: string; icon: Parameters<typeof Icon>[0]['name'] }[] = [
-    { view: 'overview', label: 'Overview', icon: 'overview' },
-    { view: 'intake', label: 'Intake desk', icon: 'inbox' },
-    { view: 'quotes', label: 'Quotes', icon: 'quote' },
-    { view: 'jobs', label: 'Jobs', icon: 'jobs' },
-    { view: 'customers', label: 'Customers', icon: 'customers' },
-    { view: 'settings', label: 'Settings', icon: 'settings' },
+    { view: 'overview', label: 'Overview', icon: 'overview' }, { view: 'intake', label: 'Intake desk', icon: 'inbox' }, { view: 'quotes', label: 'Quotes', icon: 'quote' }, { view: 'jobs', label: 'Jobs', icon: 'jobs' }, { view: 'customers', label: 'Customers', icon: 'customers' }, { view: 'settings', label: 'Settings', icon: 'settings' },
   ];
-
-  const pageTitle = ({ overview: 'Overview', intake: 'Intake desk', quotes: selectedQuote ? selectedQuote.number : 'Quotes', jobs: 'Jobs', customers: 'Customers', settings: 'Settings' } as Record<View, string>)[view];
 
   return (
     <main className="min-h-screen bg-[#f5f7f8] text-slate-900">
       <div className="flex min-h-screen">
         <aside className="hidden w-[238px] shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
-          <div className="flex h-[72px] items-center gap-3 border-b border-slate-200 px-5">
-            <TaskTuckMark />
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-sm font-bold tracking-tight text-slate-950">{settings.businessName}</span>
-                <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-teal-700">Ops</span>
-              </div>
-              <div className="mt-0.5 text-[11px] text-slate-500">Cleaning operations</div>
-            </div>
-          </div>
-
-          <div className="px-3 pt-5">
-            <button type="button" onClick={resetIntake} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800">
-              <Icon name="plus" /> New inquiry
-            </button>
-          </div>
-
-          <nav className="space-y-1 px-3 pt-5" aria-label="Primary navigation">
-            <div className="px-2 pb-2 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Workspace</div>
-            {navItems.map((item) => (
-              <button key={item.view} type="button" onClick={() => navigate(item.view)} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${view === item.view ? 'bg-teal-50 text-teal-800' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
-                <Icon name={item.icon} />
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </nav>
-
-          <div className="mt-auto space-y-3 p-3">
-            <div className="rounded-xl border border-teal-100 bg-teal-50/70 p-3">
-              <div className="flex items-center gap-2 text-[11px] font-semibold text-teal-900"><span className="h-1.5 w-1.5 rounded-full bg-teal-500" />Local AI</div>
-              <p className="mt-2 text-[10px] leading-5 text-teal-900/60">Ollama is configured for local inquiry analysis.</p>
-              {lastModel && <div className="mt-2 text-[9px] font-semibold text-teal-900/70">Last model · {lastModel}</div>}
-            </div>
-          </div>
+          <div className="flex h-[72px] items-center gap-3 border-b border-slate-200 px-5"><TaskTuckMark /><div className="min-w-0"><div className="flex items-center gap-2"><span className="truncate text-sm font-bold tracking-tight text-slate-950">{settings.businessName}</span><span className="rounded-full bg-teal-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-teal-700">Ops</span></div><div className="mt-0.5 text-[11px] text-slate-500">Cleaning operations</div></div></div>
+          <div className="px-3 pt-5"><button type="button" onClick={newInquiry} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"><Icon name="plus" /> New inquiry</button></div>
+          <nav className="space-y-1 px-3 pt-5" aria-label="Primary navigation"><div className="px-2 pb-2 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Workspace</div>{navItems.map((item) => <button key={item.view} type="button" onClick={() => navigate(item.view)} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${view === item.view ? 'bg-teal-50 text-teal-800' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}><Icon name={item.icon} /><span>{item.label}</span></button>)}</nav>
+          <div className="mt-auto p-3"><div className="rounded-xl border border-teal-100 bg-teal-50/70 p-3"><div className="flex items-center gap-2 text-[11px] font-semibold text-teal-900"><span className="h-1.5 w-1.5 rounded-full bg-teal-500" />Local AI</div><p className="mt-2 text-[10px] leading-5 text-teal-900/60">Ollama is configured for local inquiry analysis.</p>{lastModel && <div className="mt-2 text-[9px] font-semibold text-teal-900/70">Last model · {lastModel}</div>}</div></div>
         </aside>
 
         <div className="min-w-0 flex-1">
-          <header className="flex h-[72px] items-center justify-between border-b border-slate-200 bg-white/90 px-5 backdrop-blur sm:px-8">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Workspace</div>
-              <h1 className="mt-0.5 text-lg font-semibold tracking-tight text-slate-950">{pageTitle}</h1>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600 sm:flex">
-                <span className={`h-1.5 w-1.5 rounded-full ${loading ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                {lastModel ? `Local AI · ${lastModel}` : 'Local AI configured'}
-              </div>
-              <button type="button" onClick={resetIntake} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50">
-                <Icon name="plus" /> New inquiry
-              </button>
-            </div>
-          </header>
+          <header className="flex h-[72px] items-center justify-between border-b border-slate-200 bg-white/95 px-5 backdrop-blur sm:px-8"><div><div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Workspace</div><h1 className="mt-0.5 text-lg font-semibold tracking-tight text-slate-950">{pageTitle[view]}</h1></div><div className="flex items-center gap-3"><div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600 sm:flex"><span className={`h-1.5 w-1.5 rounded-full ${loading ? 'bg-amber-500' : 'bg-emerald-500'}`} />{lastModel ? `Local AI · ${lastModel}` : 'Local AI configured'}</div><button type="button" onClick={newInquiry} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"><Icon name="plus" /> New inquiry</button></div></header>
+          <div className="border-b border-slate-200 bg-white px-4 py-2 lg:hidden"><div className="flex gap-1 overflow-x-auto">{navItems.map((item) => <button key={item.view} type="button" onClick={() => navigate(item.view)} className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-semibold ${view === item.view ? 'bg-teal-50 text-teal-800' : 'text-slate-500'}`}><Icon name={item.icon} />{item.label}</button>)}</div></div>
 
           <main className="mx-auto max-w-[1480px] px-5 py-6 sm:px-8">
-            {view === 'overview' && (
-              <div className="space-y-6">
-                <section className="flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
-                  <div>
-                    <div className="inline-flex items-center gap-2 rounded-full bg-teal-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Operations overview</div>
-                    <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Keep every cleaning lead moving.</h2>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Capture an inquiry, structure it with local AI, prepare a quote, and keep the next operational step visible.</p>
-                  </div>
-                  <button type="button" onClick={resetIntake} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700"><Icon name="plus" /> New inquiry</button>
-                </section>
+            {view === 'overview' && <div className="space-y-6"><section className="flex flex-col justify-between gap-5 xl:flex-row xl:items-end"><div><div className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Operations overview</div><h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Keep every cleaning lead moving.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Capture an inquiry, structure it with local AI, prepare a quote, and keep the next operational step visible.</p></div><button type="button" onClick={newInquiry} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700"><Icon name="plus" /> New inquiry</button></section>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[['Briefs', totalBriefs, 'AI intake records'], ['Quotes', totalQuotes, `${readyQuotes} ready to send`], ['Jobs', totalJobs, 'Ready to schedule or beyond'], ['Customers', customers.length, 'Seen in saved quotes']].map(([label, value, copy]) => <div key={label as string} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div><div className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{value}</div><div className="mt-1 text-[11px] text-slate-500">{copy}</div></div>)}</div>
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]"><section className="rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><div className="text-sm font-semibold text-slate-950">Recent quotes</div><div className="mt-0.5 text-[11px] text-slate-500">Latest saved work</div></div><button type="button" onClick={() => navigate('quotes')} className="text-[11px] font-semibold text-teal-700">View all</button></div>{quotes.length ? <div className="divide-y divide-slate-100">{quotes.slice(0, 6).map((quote) => <button key={quote.id} type="button" onClick={() => { setSelectedQuoteId(quote.id); setView('quotes'); }} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-slate-50"><div className="min-w-0"><div className="flex items-center gap-2"><span className="text-xs font-semibold text-slate-900">{quote.number}</span><span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${quote.status === 'Ready to send' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{quote.status}</span></div><div className="mt-1 truncate text-xs text-slate-500">{quote.customerName || 'Customer missing'} · {quote.propertySummary || 'Property missing'}</div></div><div className="shrink-0 text-right"><div className="text-xs font-semibold text-slate-900">{money(Number.parseFloat(quote.basePrice || '0') + Number.parseFloat(quote.extras || '0'), settings.currency)}</div><div className="mt-1 text-[10px] text-slate-400">{formatDate(quote.updatedAt)}</div></div></button>)}</div> : <div className="px-5 py-12 text-center text-xs text-slate-400">No quotes yet. Start at Intake desk.</div>}</section><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700"><Icon name="spark" /></span>Workflow</div><div className="mt-4 space-y-3">{[['1', 'Capture', 'Paste the customer message exactly as received.'], ['2', 'Structure', 'Review the AI-generated operations brief.'], ['3', 'Quote', 'Add pricing and a customer-facing draft.'], ['4', 'Move', 'Mark ready and hand it to the jobs queue.']].map(([n, title, copy]) => <div key={n} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3"><span className="font-mono text-[10px] font-semibold text-teal-700">{n}</span><div><div className="text-xs font-semibold text-slate-800">{title}</div><div className="mt-0.5 text-[11px] leading-5 text-slate-500">{copy}</div></div></div>)}</div></section></div></div>}
 
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  {[
-                    ['Briefs', totalBriefs, 'AI intake records'],
-                    ['Quotes', totalQuotes, `${readyQuotes} ready to send`],
-                    ['Jobs', totalJobs, 'Ready to schedule or beyond'],
-                    ['Customers', customers.length, 'Seen in saved quotes'],
-                  ].map(([label, value, copy]) => (
-                    <div key={label as string} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
-                      <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{value}</div>
-                      <div className="mt-1 text-[11px] text-slate-500">{copy}</div>
-                    </div>
-                  ))}
-                </div>
+            {view === 'intake' && <div className="space-y-5"><section className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end"><div><div className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Customer message → operations brief</div><h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Prepare the next quote without digging through messages.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Paste the inquiry as-is. TaskTuck structures the customer, property, scope, timing, access, and follow-up items your team needs.</p></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{[['Briefs', totalBriefs], ['Status', loading ? 'Analyzing' : result ? 'Brief ready' : 'Ready'], ['Processing', 'Local']].map(([label, value]) => <div key={label} className="min-w-[110px] rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm"><div className="text-[10px] text-slate-400">{label}</div><div className="mt-1 text-xs font-semibold text-slate-800">{value}</div></div>)}</div></section>
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_360px]"><section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><div className="text-sm font-semibold text-slate-950">New inquiry</div><div className="mt-0.5 text-[11px] text-slate-500">Email, voicemail transcript, web form, or desk note</div></div><div className="hidden items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 sm:flex"><span className={`h-1.5 w-1.5 rounded-full ${loading ? 'bg-amber-500' : result ? 'bg-emerald-500' : 'bg-teal-500'}`} />{loading ? 'Analyzing' : result ? 'Brief ready' : 'Ready for intake'}</div></div><div className="p-5"><div className="mb-3 flex flex-wrap gap-2">{SAMPLES.map((sample) => <button key={sample.label} type="button" onClick={() => { setInquiry(sample.text); setResult(''); setError(''); setActiveBriefId(''); }} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800">Use {sample.label}</button>)}</div><form id="analyze-form" onSubmit={handleAnalyze}><div className="relative"><textarea aria-label="Customer inquiry" className="min-h-[300px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50/80 p-4 pb-10 text-sm leading-7 text-slate-800 outline-none placeholder:text-slate-400 focus:border-teal-300 focus:bg-white focus:ring-4 focus:ring-teal-500/10" placeholder="Paste the customer message here…" value={inquiry} onChange={(event) => { setInquiry(event.target.value); if (error) setError(''); }} disabled={loading} /><div className="pointer-events-none absolute bottom-3 left-4 right-4 flex items-center justify-between text-[10px] text-slate-400"><span>Ctrl/⌘ + Enter to analyze</span><span className={inquiry.length > 20000 ? 'font-semibold text-rose-600' : ''}>{inquiry.length.toLocaleString()} / 20,000</span></div></div><div className="mt-3 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between"><button type="button" onClick={newInquiry} disabled={!inquiry && !result} className="text-xs font-medium text-slate-500 hover:text-slate-800 disabled:opacity-40">Clear workspace</button><button type="submit" disabled={!inquiry.trim() || inquiry.length > 20000 || loading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-40">{loading ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />Analyzing inquiry</> : <>Analyze inquiry <Icon name="arrow" /></>}</button></div></form></div></section><aside className="space-y-5"><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><div className="text-sm font-semibold text-slate-950">Recent briefs</div><div className="mt-0.5 text-[11px] text-slate-500">Saved in this browser</div></div>{briefs.length > 0 && <button type="button" onClick={() => setBriefs([])} className="text-[10px] font-semibold text-slate-400 hover:text-slate-700">Clear</button>}</div>{briefs.length ? <div className="mt-4 space-y-1.5">{briefs.slice(0, 8).map((brief) => <button key={brief.id} type="button" onClick={() => openBrief(brief)} className={`w-full rounded-xl border px-3 py-2.5 text-left ${brief.id === activeBriefId ? 'border-teal-200 bg-teal-50' : 'border-transparent bg-slate-50 hover:border-slate-200 hover:bg-white'}`}><div className="truncate text-xs font-semibold text-slate-800">{getJobLabel(brief.inquiry)}</div><div className="mt-1 flex items-center justify-between text-[10px] text-slate-400"><span>{formatDate(brief.createdAt)}</span><span>{formatTime(brief.createdAt)}</span></div></button>)}</div> : <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-5 text-[11px] leading-5 text-slate-400">Your analyzed inquiries will appear here.</div>}</section><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-xs font-semibold text-slate-800"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-700"><Icon name="spark" /></span>Brief coverage</div><p className="mt-2 text-[11px] leading-5 text-slate-500">The analyzer looks for the signals an operator usually needs before a quote.</p><div className="mt-4 grid grid-cols-2 gap-2">{BRIEF_SECTIONS.map((item) => <div key={item} className="rounded-lg border border-slate-200 px-2.5 py-2 text-[10px] font-medium text-slate-600">{item.replace(' & ', ' + ')}</div>)}</div></section></aside></div>
+              {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800"><span className="font-semibold">Action needed.</span> {error}</div>}
+              <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className={`flex h-9 w-9 items-center justify-center rounded-xl ${result ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}><Icon name={result ? 'check' : 'spark'} /></div><div><div className="text-sm font-semibold text-slate-950">Operations brief</div><div className="mt-0.5 text-[11px] text-slate-500">{result ? `Ready · ${lastRunAt ? formatTime(lastRunAt) : ''}${lastModel ? ` · ${lastModel}` : ''}` : 'Analyze an inquiry to populate the brief.'}</div></div></div><div className="flex flex-wrap gap-2">{result && <button type="button" onClick={() => copyText(result)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600"><Icon name="copy" />{copied ? 'Copied' : 'Copy'}</button>}{result && <button type="button" onClick={() => downloadText(result, `tasktuck-brief-${new Date().toISOString().slice(0, 10)}.md`)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600"><Icon name="download" />Export .md</button>}{result && <button type="button" onClick={createQuoteFromBrief} className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-[11px] font-semibold text-white"><Icon name="quote" />Prepare quote</button>}</div></div><div className="px-5 py-6 sm:px-7">{result ? <div className="space-y-4"><div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-xs text-emerald-900"><span className="font-semibold">Brief ready.</span> Review the extracted details, then move into quote preparation.</div><div className="grid gap-3 md:grid-cols-2">{sections.filter((section) => section.title !== 'Follow-up checklist').map((section) => <section key={section.title} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{section.title}</div><div className="mt-3 space-y-2">{section.items.length ? section.items.map((item, index) => <p key={`${section.title}-${index}`} className={`text-xs leading-5 ${/not provided/i.test(item) ? 'text-slate-400' : 'text-slate-700'}`}>{cleanItem(item)}</p>) : <p className="text-xs text-slate-400">Missing</p>}</div></section>)}</div>{followUpItems.length > 0 && <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4"><div className="flex items-center justify-between"><div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Follow-up before pricing</div><p className="mt-1 text-xs text-amber-900/70">Resolve these before treating the brief as complete.</p></div><span className="rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold text-amber-700">{followUpItems.length} items</span></div><div className="mt-3 grid gap-2 md:grid-cols-2">{followUpItems.map((item) => <div key={item} className="rounded-lg border border-amber-200/80 bg-white/70 px-3 py-2.5 text-xs text-slate-700">{cleanItem(item)}</div>)}</div></section>}</div> : <div className="flex min-h-[180px] items-center justify-center text-center"><div><div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><Icon name="spark" /></div><div className="mt-4 text-sm font-semibold text-slate-700">Nothing to review yet</div><p className="mt-1.5 text-xs text-slate-400">Analyze an inquiry and the structured operations brief will land here.</p></div></div>}</div></section></div>}
 
-                <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-                  <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-                      <div>
-                        <div className="text-sm font-semibold text-slate-950">Recent activity</div>
-                        <div className="mt-0.5 text-[11px] text-slate-500">Latest saved records across the workspace</div>
-                      </div>
-                      <button type="button" onClick={() => navigate('quotes')} className="text-[11px] font-semibold text-teal-700 hover:text-teal-800">View quotes</button>
-                    </div>
-                    <div className="divide-y divide-slate-100">
-                      {quotes.length > 0 ? quotes.slice(0, 6).map((quote) => (
-                        <button key={quote.id} type="button" onClick={() => { setSelectedQuoteId(quote.id); setView('quotes'); }} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-slate-50">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2"><span className="text-xs font-semibold text-slate-900">{quote.number}</span><span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${quote.status === 'Ready to send' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{quote.status}</span></div>
-                            <div className="mt-1 truncate text-xs text-slate-500">{quote.customerName || 'Customer missing'} · {quote.propertySummary || 'Property missing'}</div>
-                          </div>
-                          <div className="shrink-0 text-right"><div className="text-xs font-semibold text-slate-900">{formatMoney(quoteTotal(quote), settings.currency)}</div><div className="mt-1 text-[10px] text-slate-400">{formatDate(quote.updatedAt)}</div></div>
-                        </button>
-                      )) : (
-                        <div className="px-5 py-10 text-center text-xs text-slate-400">No quotes yet. Start from Intake desk and turn the first brief into a quote.</div>
-                      )}
-                    </div>
-                  </section>
+            {view === 'quotes' && <div className="space-y-5">{!selectedQuote ? <><section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Sales workspace</div><h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Quotes</h2><p className="mt-2 text-sm text-slate-500">Build, review, and keep customer-facing cleaning quotes organized.</p></div><button type="button" onClick={newInquiry} className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-3 text-sm font-semibold text-white"><Icon name="plus" /> New inquiry</button></section><div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row"><label className="relative flex-1"><span className="sr-only">Search quotes</span><Icon name="search" /><input value={quoteSearch} onChange={(event) => setQuoteSearch(event.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-xs outline-none focus:border-teal-300 focus:bg-white" placeholder="Search quote number, customer, or property…" /></label><select value={quoteStatusFilter} onChange={(event) => setQuoteStatusFilter(event.target.value as 'All' | QuoteStatus)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-600 outline-none"><option>All</option><option>Draft</option><option>Ready to send</option></select></div><section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><div className="min-w-[760px]"><div className="grid grid-cols-[1.05fr_1.2fr_0.9fr_0.7fr_0.8fr] border-b border-slate-200 bg-slate-50 px-5 py-3 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400"><span>Quote</span><span>Customer / property</span><span>Date</span><span>Total</span><span>Status</span></div>{filteredQuotes.length ? filteredQuotes.map((quote) => <button key={quote.id} type="button" onClick={() => setSelectedQuoteId(quote.id)} className="grid w-full grid-cols-[1.05fr_1.2fr_0.9fr_0.7fr_0.8fr] items-center border-b border-slate-100 px-5 py-4 text-left last:border-0 hover:bg-slate-50"><div><div className="text-xs font-semibold text-slate-900">{quote.number}</div><div className="mt-1 text-[10px] text-slate-400">{formatDate(quote.updatedAt)}</div></div><div className="min-w-0"><div className="truncate text-xs font-medium text-slate-800">{quote.customerName || 'Customer missing'}</div><div className="mt-1 truncate text-[10px] text-slate-400">{quote.propertySummary || 'Property missing'}</div></div><span className="text-xs text-slate-600">{present(quote.cleaningDate)}</span><span className="text-xs font-semibold text-slate-900">{money(Number.parseFloat(quote.basePrice || '0') + Number.parseFloat(quote.extras || '0'), settings.currency)}</span><span className={`justify-self-start rounded-full px-2 py-1 text-[9px] font-semibold ${quote.status === 'Ready to send' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{quote.status}</span></button>) : <div className="px-5 py-14 text-center text-xs text-slate-400">No matching quotes.</div>}</div></div></section></> : <>
+              <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><button type="button" onClick={() => setSelectedQuoteId('')} className="mb-3 inline-flex items-center gap-2 text-[11px] font-semibold text-slate-500 hover:text-slate-800"><Icon name="back" /> Back to quotes</button><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Quote editor</div><h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{selectedQuote.number}</h2><p className="mt-1 text-sm text-slate-500">Edit the quote, preview it, and move it to the jobs queue.</p></div><div className="flex flex-wrap gap-2">{selectedQuote.status === 'Ready to send' && <button type="button" onClick={createJobFromQuote} className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-3 py-2 text-[11px] font-semibold text-white"><Icon name="jobs" /> Create job</button>}<button type="button" onClick={() => downloadQuote(selectedQuote)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600"><Icon name="download" /> Export</button><button type="button" onClick={printQuote} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600"><Icon name="print" /> Print</button></div></section>
+              {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">{error}</div>}
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(420px,1.05fr)]"><div className="space-y-5">
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Customer</div><div className="mt-1 text-[11px] text-slate-500">Complete the customer details before sending.</div></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${selectedQuote.customerName ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{selectedQuote.customerName ? 'Ready' : 'Name missing'}</span></div><div className="mt-4 grid gap-3"><label><span className="text-xs font-medium text-slate-700">Customer name</span><input value={selectedQuote.customerName} onChange={(event) => updateQuote({ customerName: event.target.value })} placeholder="Customer name" className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label><div className="grid gap-3 sm:grid-cols-2"><label><span className="text-xs font-medium text-slate-700">Email</span><input type="email" value={selectedQuote.customerEmail} onChange={(event) => updateQuote({ customerEmail: event.target.value })} placeholder="customer@example.com" className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label><label><span className="text-xs font-medium text-slate-700">Phone</span><input value={selectedQuote.customerPhone} onChange={(event) => updateQuote({ customerPhone: event.target.value })} placeholder="Phone" className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label></div></div></section>
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Scope</div><div className="mt-1 text-[11px] text-slate-500">Taken from the reviewed operations brief.</div><div className="mt-4 flex flex-wrap gap-2">{selectedQuote.propertySummary.split(' · ').filter(Boolean).map((value) => <span key={value} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-700">{value}</span>)}{selectedQuote.accessDetails.slice(0, 2).map((value) => <span key={value} className="rounded-full border border-teal-100 bg-teal-50 px-2.5 py-1 text-[11px] text-teal-800">{cleanItem(value)}</span>)}</div><div className="mt-4 space-y-2">{selectedQuote.serviceItems.map((item) => <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700">{cleanItem(item)}</div>)}{selectedQuote.cleaningDate && <div className="rounded-lg border border-slate-200 px-3 py-2.5 text-xs text-slate-700"><span className="font-semibold">Cleaning date:</span> {selectedQuote.cleaningDate}</div>}{selectedQuote.relatedDate && <div className="rounded-lg border border-slate-200 px-3 py-2.5 text-xs text-slate-700"><span className="font-semibold">Related date:</span> {selectedQuote.relatedDate}</div>}</div></section>
+                <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 shadow-sm"><div className="flex items-center justify-between"><div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Operator checks</div><div className="mt-1 text-[11px] text-amber-900/70">Resolve these before marking the quote ready.</div></div><span className="rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold text-amber-700">{selectedQuote.checkedFollowUps.length}/{selectedQuote.followUpItems.length} done</span></div><div className="mt-3 space-y-2">{selectedQuote.followUpItems.length ? selectedQuote.followUpItems.map((item) => { const checked = selectedQuote.checkedFollowUps.includes(item); return <label key={item} className="flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200/80 bg-white/70 px-3 py-2.5"><input type="checkbox" checked={checked} onChange={() => toggleQuoteFollowUp(item)} className="mt-0.5 accent-teal-600" /><span className={`text-xs leading-5 ${checked ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{cleanItem(item)}</span></label>; }) : <div className="rounded-lg bg-white/70 px-3 py-3 text-xs text-slate-500">No follow-up items were returned.</div>}</div></section>
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Constraints & signals</div><div className="mt-1 text-[11px] text-slate-500">Keep details that can change the job scope visible.</div></div><Icon name="edit" /></div><div className="mt-3 space-y-2">{selectedQuote.constraintItems.length ? selectedQuote.constraintItems.map((item) => <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-700">{cleanItem(item)}</div>) : <div className="text-xs text-slate-400">Missing</div>}</div></section>
+              </div><div className="space-y-5"><section className="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm"><div className="flex items-start justify-between"><div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Pricing</div><div className="mt-1 text-[11px] text-slate-500">Manual pricing. The total updates live.</div></div>{selectedQuote.status === 'Ready to send' ? <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">Ready to send</span> : <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-500">Draft</span>}</div><div className="mt-4 grid gap-3 sm:grid-cols-2"><label><span className="text-xs font-medium text-slate-700">Base service</span><div className="mt-1 flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3"><span className="text-[10px] text-slate-400">{settings.currency}</span><input inputMode="decimal" value={selectedQuote.basePrice} onChange={(event) => updateQuote({ basePrice: event.target.value })} placeholder="0.00" className="w-full bg-transparent px-2 py-2.5 text-sm outline-none" /></div></label><label><span className="text-xs font-medium text-slate-700">Extras / add-ons</span><div className="mt-1 flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3"><span className="text-[10px] text-slate-400">{settings.currency}</span><input inputMode="decimal" value={selectedQuote.extras} onChange={(event) => updateQuote({ extras: event.target.value })} placeholder="0.00" className="w-full bg-transparent px-2 py-2.5 text-sm outline-none" /></div></label></div><div className="mt-5 flex flex-col gap-3 rounded-xl bg-slate-950 p-4 text-white sm:flex-row sm:items-end sm:justify-between"><div><div className="text-[10px] uppercase tracking-[0.14em] text-white/50">Quote total</div><div className="mt-1 text-3xl font-semibold tracking-tight">{money(selectedQuoteTotal, settings.currency)}</div><div className="mt-1 text-[10px] text-white/45">No automatic tax or fees</div></div><button type="button" onClick={markQuoteReady} disabled={!quoteCanBeReady || selectedQuote.status === 'Ready to send'} className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-[11px] font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40">{selectedQuote.status === 'Ready to send' ? <><Icon name="check" />Ready to send</> : <>Mark ready <Icon name="arrow" /></>}</button></div>{!quoteCanBeReady && selectedQuote.status !== 'Ready to send' && <div className="mt-3 text-[10px] text-amber-700">To mark ready: add a customer name, enter a total above $0, and resolve all operator checks.</div>}</section>
+                <section className="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm"><div className="flex items-center justify-between gap-3"><div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Customer note</div><div className="mt-1 text-[11px] text-slate-500">Edit before sending from your own channel.</div></div><div className="flex gap-3"><button type="button" onClick={() => updateQuote({ note: settings.defaultNote })} className="text-[10px] font-semibold text-teal-700">Use template</button><button type="button" onClick={() => copyText(selectedQuote.note)} className="text-[10px] font-semibold text-slate-500">{copied ? 'Copied' : 'Copy note'}</button></div></div><textarea value={selectedQuote.note} onChange={(event) => updateQuote({ note: event.target.value })} className="mt-4 min-h-[150px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-6 outline-none focus:border-teal-300 focus:bg-white" placeholder="Draft a customer-facing note here…" /><div className="mt-3 flex items-center justify-between text-[10px] text-slate-400"><span>Nothing is sent automatically.</span><span>Saved automatically</span></div></section>
+                <section className="quote-print-area rounded-2xl border border-slate-300 bg-white p-5 shadow-sm"><div className="mb-4 flex items-center justify-between"><div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Customer preview</div><div className="mt-1 text-sm font-semibold text-slate-950">Live quote</div></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-semibold text-slate-500">{selectedQuote.status}</span></div><div className="rounded-xl border border-slate-200 bg-white p-6"><div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-5"><div><div className="text-lg font-semibold tracking-tight text-slate-950">{settings.businessName}</div><div className="mt-1 text-[11px] text-slate-500">Cleaning service quote · {selectedQuote.number}</div>{(settings.email || settings.phone) && <div className="mt-2 text-[10px] text-slate-400">{[settings.email, settings.phone].filter(Boolean).join(' · ')}</div>}</div><div className="text-right text-[10px] text-slate-400">{formatDate(selectedQuote.updatedAt)}</div></div><div className="mt-5"><div className="text-base font-semibold text-slate-950">{selectedQuote.customerName || 'Customer name missing'}</div><div className="mt-1 text-[11px] text-slate-500">{selectedQuote.propertySummary || 'Property details missing'}</div></div><div className="mt-5 space-y-2 border-y border-slate-100 py-4">{selectedQuote.serviceItems.filter(Boolean).slice(0, 8).map((item) => <div key={item} className="flex gap-2 text-xs text-slate-700"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500" />{cleanItem(item)}</div>)}{selectedQuote.cleaningDate && <div className="pt-1 text-xs text-slate-500">Cleaning date: <span className="font-medium text-slate-800">{selectedQuote.cleaningDate}</span></div>}{selectedQuote.relatedDate && <div className="text-xs text-slate-500">Related date: <span className="font-medium text-slate-800">{selectedQuote.relatedDate}</span></div>}</div><div className="flex items-end justify-between gap-4 pt-5"><div className="max-w-[64%] whitespace-pre-wrap text-[10px] leading-5 text-slate-500">{selectedQuote.note || 'Customer note will appear here.'}</div><div className="text-right"><div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Total</div><div className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{money(selectedQuoteTotal, settings.currency)}</div></div></div>{(selectedQuote.terms || settings.terms) && <div className="mt-5 border-t border-slate-100 pt-4 text-[10px] leading-5 text-slate-400">{selectedQuote.terms || settings.terms}</div>}</div></section>
+              </div></div></>}
+            </div>}
 
-                  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700"><Icon name="spark" /></span>Workflow</div>
-                    <div className="mt-4 space-y-3">
-                      {[
-                        ['1', 'Capture', 'Paste the customer message exactly as received.'],
-                        ['2', 'Structure', 'Review the AI-generated operations brief.'],
-                        ['3', 'Quote', 'Add pricing and a customer-facing draft.'],
-                        ['4', 'Move', 'Mark ready and hand it to the jobs queue.'],
-                      ].map(([number, title, copy]) => (
-                        <div key={number} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3"><span className="mt-0.5 font-mono text-[10px] font-semibold text-teal-700">{number}</span><div><div className="text-xs font-semibold text-slate-800">{title}</div><div className="mt-0.5 text-[11px] leading-5 text-slate-500">{copy}</div></div></div>
-                      ))}
-                    </div>
-                  </section>
-                </div>
-              </div>
-            )}
+            {view === 'jobs' && <div className="space-y-5"><section><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Operations queue</div><h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Jobs</h2><p className="mt-2 text-sm text-slate-500">A simple local queue for work that is ready to schedule or already in progress.</p></section><div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex flex-wrap gap-2">{(['All', 'Ready to schedule', 'Scheduled', 'Completed'] as const).map((status) => <button key={status} type="button" onClick={() => setJobStatusFilter(status)} className={`rounded-lg px-3 py-2 text-[11px] font-semibold ${jobStatusFilter === status ? 'bg-teal-50 text-teal-800' : 'text-slate-500 hover:bg-slate-50'}`}>{status}</button>)}</div></div><section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">{filteredJobs.length ? filteredJobs.map((job) => <div key={job.id} className="flex flex-col gap-4 border-b border-slate-100 px-5 py-5 last:border-0 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><span className="text-xs font-semibold text-slate-900">{job.quoteNumber}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-[9px] font-semibold text-slate-500">{job.status}</span></div><div className="mt-1 text-xs font-medium text-slate-800">{job.customerName || 'Customer missing'}</div><div className="mt-1 text-[11px] text-slate-500">{job.propertySummary || 'Property missing'} · {job.serviceSummary || 'Service scope missing'}</div><div className="mt-1 text-[10px] text-slate-400">Cleaning date · {present(job.cleaningDate)}</div></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setSelectedQuoteId(job.quoteId); setView('quotes'); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600">Open quote</button><select value={job.status} onChange={(event) => updateJobStatus(job.id, event.target.value as JobStatus)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 outline-none"><option>Ready to schedule</option><option>Scheduled</option><option>Completed</option></select></div></div>) : <div className="px-5 py-14 text-center text-xs text-slate-400">No jobs in this state.</div>}</section></div>}
 
-            {view === 'intake' && (
-              <div className="space-y-5">
-                <section className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
-                  <div>
-                    <div className="inline-flex items-center gap-2 rounded-full bg-teal-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Customer message → operations brief</div>
-                    <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Prepare the next quote without digging through messages.</h2>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Paste the inquiry as-is. TaskTuck structures the customer, property, scope, timing, access notes, and follow-up items your team needs.</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {[
-                      ['Briefs', String(totalBriefs)],
-                      ['Current status', statusLabel],
-                      ['Processing', 'Local'],
-                    ].map(([label, value]) => <div key={label} className="min-w-[120px] rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm"><div className="text-[10px] font-medium text-slate-400">{label}</div><div className="mt-1 text-xs font-semibold text-slate-800">{value}</div></div>)}
-                  </div>
-                </section>
+            {view === 'customers' && <div className="space-y-5"><section><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Customer directory</div><h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Customers</h2><p className="mt-2 text-sm text-slate-500">Customers appear from the details you save on quotes.</p></section><div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><label className="relative block"><span className="sr-only">Search customers</span><span className="absolute left-3 top-3 text-slate-400"><Icon name="search" /></span><input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-xs outline-none focus:border-teal-300 focus:bg-white" placeholder="Search customer, email, or phone…" /></label></div><section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">{filteredCustomers.length ? <div className="divide-y divide-slate-100">{filteredCustomers.map((customer) => <div key={customer.name} className="flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-semibold text-slate-900">{customer.name}</div><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500"><span>{customer.email || 'Email missing'}</span><span>{customer.phone || 'Phone missing'}</span></div></div><div className="text-left sm:text-right"><div className="text-xs font-semibold text-slate-800">{customer.quotes} quote{customer.quotes === 1 ? '' : 's'}</div><div className="mt-1 text-[10px] text-slate-400">Last activity · {formatDate(customer.lastActivity)}</div></div></div>)}</div> : <div className="px-5 py-14 text-center text-xs text-slate-400">No matching customers.</div>}</section></div>}
 
-                <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_360px]">
-                  <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><div className="text-sm font-semibold text-slate-950">New inquiry</div><div className="mt-0.5 text-[11px] text-slate-500">Email, voicemail transcript, web form, or desk note</div></div><div className="hidden items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 sm:flex"><span className={`h-1.5 w-1.5 rounded-full ${loading ? 'bg-amber-500' : result ? 'bg-emerald-500' : 'bg-teal-500'}`} />{statusLabel}</div></div>
-                    <div className="p-5">
-                      <div className="mb-3 flex flex-wrap gap-2">{SAMPLES.map((sample) => <button key={sample.label} type="button" onClick={() => { setInquiry(sample.text); setResult(''); setError(''); setActiveBriefId(''); }} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800">Use {sample.label}</button>)}</div>
-                      <form id="analyze-form" onSubmit={handleAnalyze}>
-                        <div className="relative"><textarea aria-label="Customer inquiry" className="min-h-[300px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50/80 p-4 pb-10 text-sm leading-7 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-teal-300 focus:bg-white focus:ring-4 focus:ring-teal-500/10" placeholder="Paste the customer message here…" value={inquiry} onChange={(event) => { setInquiry(event.target.value); if (error) setError(''); }} disabled={loading} /><div className="pointer-events-none absolute bottom-3 left-4 right-4 flex items-center justify-between text-[10px] text-slate-400"><span>Ctrl/⌘ + Enter to analyze</span><span className={inquiry.length > 20000 ? 'font-semibold text-rose-600' : ''}>{inquiry.length.toLocaleString()} / 20,000</span></div></div>
-                        <div className="mt-3 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between"><button type="button" onClick={resetIntake} disabled={!inquiry && !result} className="text-xs font-medium text-slate-500 transition hover:text-slate-800 disabled:opacity-40">Clear workspace</button><button type="submit" disabled={!inquiry.trim() || inquiry.length > 20000 || loading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-40">{loading ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />Analyzing inquiry</> : <>Analyze inquiry <Icon name="arrow" /></>}</button></div>
-                      </form>
-                    </div>
-                  </section>
-
-                  <aside className="space-y-5">
-                    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><div className="text-sm font-semibold text-slate-950">Recent briefs</div><div className="mt-0.5 text-[11px] text-slate-500">Saved in this browser</div></div>{briefs.length > 0 && <button type="button" onClick={() => setBriefs([])} className="text-[10px] font-semibold text-slate-400 hover:text-slate-700">Clear</button>}</div>{briefs.length > 0 ? <div className="mt-4 space-y-1.5">{briefs.slice(0, 8).map((brief) => <button key={brief.id} type="button" onClick={() => openBrief(brief)} className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${brief.id === activeBriefId ? 'border-teal-200 bg-teal-50' : 'border-transparent bg-slate-50 hover:border-slate-200 hover:bg-white'}`}><div className="truncate text-xs font-semibold text-slate-800">{getJobLabel(brief.inquiry)}</div><div className="mt-1 flex items-center justify-between text-[10px] text-slate-400"><span>{formatDate(brief.createdAt)}</span><span>{formatTime(brief.createdAt)}</span></div></button>)}</div> : <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-5 text-[11px] leading-5 text-slate-400">Your analyzed inquiries will appear here.</div>}</section>
-                    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-xs font-semibold text-slate-800"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-700"><Icon name="spark" /></span>Brief coverage</div><p className="mt-2 text-[11px] leading-5 text-slate-500">The analyzer looks for the signals an operator usually needs before a quote.</p><div className="mt-4 grid grid-cols-2 gap-2">{BRIEF_SECTIONS.map((item) => <div key={item} className="rounded-lg border border-slate-200 px-2.5 py-2 text-[10px] font-medium text-slate-600">{item.replace(' & ', ' + ')}</div>)}</div></section>
-                  </aside>
-                </div>
-
-                {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800"><span className="font-semibold">Action needed.</span> <span className="break-all text-rose-700/80">{error}</span></div>}
-
-                <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className={`flex h-9 w-9 items-center justify-center rounded-xl ${result ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}><Icon name={result ? 'check' : 'spark'} /></div><div><div className="text-sm font-semibold text-slate-950">Operations brief</div><div className="mt-0.5 text-[11px] text-slate-500">{result ? `${statusLabel}${lastRunAt ? ` · ${formatTime(lastRunAt)}` : ''}${lastModel ? ` · ${lastModel}` : ''}` : 'Analyze an inquiry to populate the brief.'}</div></div></div><div className="flex flex-wrap items-center gap-2">{result && <button type="button" onClick={() => handleCopy(result)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"> <Icon name="copy" />{copied ? 'Copied' : 'Copy'}</button>}{result && <button type="button" onClick={() => handleDownload()} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"><Icon name="download" />Export .md</button>}{result && <button type="button" onClick={createQuoteFromBrief} className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-slate-800"><Icon name="quote" />Prepare quote</button>}</div></div><div className="px-5 py-6 sm:px-7">{result ? <div className="space-y-4"><div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-xs text-emerald-900"><span className="font-semibold">Brief ready.</span> Review the extracted details, then move into quote preparation.</div><div className="grid gap-3 md:grid-cols-2">{sections.filter((section) => section.title !== 'Follow-up checklist').map((section) => <section key={section.title} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{section.title}</div><div className="mt-3 space-y-2">{section.items.length > 0 ? section.items.map((item, index) => <p key={`${section.title}-${index}`} className={`text-xs leading-5 ${/not provided/i.test(item) ? 'text-slate-400' : 'text-slate-700'}`}>{cleanItem(item)}</p>) : <p className="text-xs text-slate-400">Missing</p>}</div></section>)}</div>{followUpItems.length > 0 && <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4"><div className="flex items-center justify-between gap-3"><div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Follow-up before pricing</div><p className="mt-1 text-xs text-amber-900/70">Confirm these items before treating the brief as complete.</p></div><span className="rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold text-amber-700">{0}/{followUpItems.length}</span></div><div className="mt-3 grid gap-2 md:grid-cols-2">{followUpItems.map((item) => <div key={item} className="rounded-lg border border-amber-200/80 bg-white/70 px-3 py-2.5 text-xs text-slate-700">{cleanItem(item)}</div>)}</div></section>}</div> : <div className="flex min-h-[190px] items-center justify-center text-center"><div className="max-w-md"><div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><Icon name="spark" /></div><div className="mt-4 text-sm font-semibold text-slate-700">Nothing to review yet</div><p className="mt-1.5 text-xs leading-5 text-slate-400">Analyze an inquiry and the structured operations brief will land here.</p></div></div>}</div></section>
-              </div>
-            )}
-
-            {view === 'quotes' && (
-              <div className="space-y-5">
-                {!selectedQuote ? <>
-                  <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Sales workspace</div><h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Quotes</h2><p className="mt-2 text-sm text-slate-500">Build, review, and save customer-facing cleaning quotes.</p></div><button type="button" onClick={resetIntake} className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-3 text-sm font-semibold text-white"><Icon name="plus" /> New inquiry</button></section>
-                  <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="grid grid-cols-[1.2fr_1fr_0.8fr_0.6fr_0.7fr] border-b border-slate-200 bg-slate-50 px-5 py-3 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400"><span>Quote</span><span>Customer / property</span><span>Date</span><span>Total</span><span>Status</span></div>{quotes.length > 0 ? quotes.map((quote) => <button key={quote.id} type="button" onClick={() => setSelectedQuoteId(quote.id)} className="grid w-full grid-cols-[1.2fr_1fr_0.8fr_0.6fr_0.7fr] items-center border-b border-slate-100 px-5 py-4 text-left last:border-0 hover:bg-slate-50"><div><div className="text-xs font-semibold text-slate-900">{quote.number}</div><div className="mt-1 text-[10px] text-slate-400">Updated {formatDate(quote.updatedAt)}</div></div><div className="min-w-0"><div className="truncate text-xs font-medium text-slate-800">{quote.customerName || 'Customer missing'}</div><div className="mt-1 truncate text-[10px] text-slate-400">{quote.propertySummary || 'Property missing'}</div></div><span className="text-xs text-slate-600">{present(quote.cleaningDate)}</span><span className="text-xs font-semibold text-slate-900">{formatMoney(quoteTotal(quote), settings.currency)}</span><span className={`justify-self-start rounded-full px-2 py-1 text-[9px] font-semibold ${quote.status === 'Ready to send' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{quote.status}</span></button>) : <div className="px-5 py-14 text-center text-xs text-slate-400">No quotes yet. Create one from a completed intake brief.</div>}</section>
-                </> : <>
-                  <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><button type="button" onClick={() => setSelectedQuoteId('')} className="mb-3 inline-flex items-center gap-2 text-[11px] font-semibold text-slate-500 hover:text-slate-800"><Icon name="back" />Back to quotes</button><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Quote editor</div><h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{selectedQuote.number}</h2><p className="mt-1 text-sm text-slate-500">Edit the quote, preview the customer-facing draft, and move it to the jobs queue.</p></div><div className="flex flex-wrap gap-2">{selectedQuote.status === 'Ready to send' && <button type="button" onClick={createJobFromQuote} className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-3 py-2 text-[11px] font-semibold text-white"><Icon name="jobs" />Create job</button>}<button type="button" onClick={() => handleDownload(selectedQuote)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600"><Icon name="download" />Export</button><button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600"><Icon name="print" />Print</button></div></section>
-                  {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">{error}</div>}
-                  <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(420px,1.05fr)]">
-                    <div className="space-y-5">
-                      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between"><div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Customer</div><div className="mt-1 text-[11px] text-slate-500">Fill the contact details before sending.</div></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${selectedQuote.customerName ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{selectedQuote.customerName ? 'Ready' : 'Name missing'}</span></div><div className="mt-4 grid gap-3"><label className="block"><span className="text-xs font-medium text-slate-700">Customer name</span><input value={selectedQuote.customerName} onChange={(event) => updateQuote({ customerName: event.target.value })} placeholder="Customer name" className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label><div className="grid gap-3 sm:grid-cols-2"><label className="block"><span className="text-xs font-medium text-slate-700">Email</span><input value={selectedQuote.customerEmail} onChange={(event) => updateQuote({ customerEmail: event.target.value })} placeholder="customer@example.com" className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label><label className="block"><span className="text-xs font-medium text-slate-700">Phone</span><input value={selectedQuote.customerPhone} onChange={(event) => updateQuote({ customerPhone: event.target.value })} placeholder="Phone" className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label></div></div></section>
-                      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Scope</div><div className="mt-1 text-[11px] text-slate-500">Taken from the reviewed operations brief.</div><div className="mt-4 flex flex-wrap gap-2">{selectedQuote.propertySummary.split(' · ').filter(Boolean).map((value) => <span key={value} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-700">{value}</span>)}{selectedQuote.accessDetails.slice(0, 2).map((value) => <span key={value} className="rounded-full border border-teal-100 bg-teal-50 px-2.5 py-1 text-[11px] text-teal-800">{cleanItem(value)}</span>)}</div><div className="mt-4 space-y-2">{selectedQuote.serviceItems.map((item) => <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700">{cleanItem(item)}</div>)}{selectedQuote.cleaningDate && <div className="rounded-lg border border-slate-200 px-3 py-2.5 text-xs text-slate-700"><span className="font-semibold">Cleaning date:</span> {selectedQuote.cleaningDate}</div>}{selectedQuote.relatedDate && <div className="rounded-lg border border-slate-200 px-3 py-2.5 text-xs text-slate-700"><span className="font-semibold">Related date:</span> {selectedQuote.relatedDate}</div>}</div></section>
-                      <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 shadow-sm"><div className="flex items-center justify-between"><div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Operator checks</div><div className="mt-1 text-[11px] text-amber-900/70">Confirm outstanding scope details before sending.</div></div><span className="text-[10px] font-semibold text-amber-700">{selectedQuote.checkedFollowUps.length}/{followUpItems.length} done</span></div><div className="mt-3 space-y-2">{followUpItems.length > 0 ? followUpItems.map((item) => { const checked = selectedQuote.checkedFollowUps.includes(item); return <label key={item} className="flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200/80 bg-white/70 px-3 py-2.5"><input type="checkbox" checked={checked} onChange={() => toggleQuoteFollowUp(item)} className="mt-0.5 accent-teal-600" /><span className={`text-xs leading-5 ${checked ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{cleanItem(item)}</span></label>; }) : <div className="rounded-lg bg-white/70 px-3 py-3 text-xs text-slate-500">No follow-up items were returned.</div>}</div></section>
-                    </div>
-
-                    <div className="space-y-5"><section className="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Pricing</div><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="block"><span className="text-xs font-medium text-slate-700">Base service</span><div className="mt-1 flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3"><span className="text-xs text-slate-400">{settings.currency}</span><input inputMode="decimal" value={selectedQuote.basePrice} onChange={(event) => updateQuote({ basePrice: event.target.value })} placeholder="0.00" className="w-full bg-transparent px-2 py-2.5 text-sm outline-none" /></div></label><label className="block"><span className="text-xs font-medium text-slate-700">Extras / add-ons</span><div className="mt-1 flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3"><span className="text-xs text-slate-400">{settings.currency}</span><input inputMode="decimal" value={selectedQuote.extras} onChange={(event) => updateQuote({ extras: event.target.value })} placeholder="0.00" className="w-full bg-transparent px-2 py-2.5 text-sm outline-none" /></div></label></div><div className="mt-5 flex items-end justify-between gap-4 rounded-xl bg-slate-950 p-4 text-white"><div><div className="text-[10px] uppercase tracking-[0.14em] text-white/50">Quote total</div><div className="mt-1 text-3xl font-semibold tracking-tight">{formatMoney(quoteTotal(selectedQuote), settings.currency)}</div><div className="mt-1 text-[10px] text-white/45">Manual pricing · no automatic tax or fees</div></div>{selectedQuote.status === 'Draft' ? <button type="button" onClick={markQuoteReady} className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-[11px] font-semibold text-slate-950"><Icon name="check" />Mark ready</button> : <span className="rounded-lg bg-emerald-400/10 px-3 py-2 text-[11px] font-semibold text-emerald-200">Ready to send</span>}</div></section>
-
-                      <section className="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Customer note</div><div className="mt-1 text-[11px] text-slate-500">Edit before sending from your own channel.</div></div><div className="flex gap-3"><button type="button" onClick={() => updateQuote({ note: settings.defaultNote })} className="text-[10px] font-semibold text-teal-700">Use template</button><button type="button" onClick={() => handleCopy(selectedQuote.note)} className="text-[10px] font-semibold text-slate-500">{copied ? 'Copied' : 'Copy note'}</button></div></div><textarea value={selectedQuote.note} onChange={(event) => updateQuote({ note: event.target.value })} className="mt-4 min-h-[160px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-6 outline-none focus:border-teal-300 focus:bg-white" placeholder="Draft a customer-facing note here…" /><div className="mt-3 text-[10px] text-slate-400">Nothing is sent automatically.</div></section>
-
-                      <section className="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm"><div className="mb-4 flex items-center justify-between"><div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Customer preview</div><div className="mt-1 text-sm font-semibold text-slate-950">Live quote</div></div><span className={`rounded-full px-2.5 py-1 text-[9px] font-semibold ${selectedQuote.status === 'Ready to send' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{selectedQuote.status}</span></div><div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-5"><div><div className="text-lg font-semibold tracking-tight text-slate-950">{settings.businessName}</div><div className="mt-1 text-[11px] text-slate-500">Cleaning service quote · {selectedQuote.number}</div></div><div className="text-right text-[10px] text-slate-400">{formatDate(selectedQuote.updatedAt)}</div></div><div className="mt-5"><div className="text-sm font-semibold text-slate-950">{selectedQuote.customerName || 'Customer name missing'}</div><div className="mt-1 text-[11px] text-slate-500">{selectedQuote.propertySummary || 'Property details missing'}</div></div><div className="mt-5 space-y-2 border-y border-slate-100 py-4">{selectedQuote.serviceItems.filter((item) => item.trim()).slice(0, 8).map((item) => <div key={item} className="flex gap-2 text-xs text-slate-700"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500" />{cleanItem(item)}</div>)}{selectedQuote.cleaningDate && <div className="pt-1 text-xs text-slate-500">Cleaning date: <span className="font-medium text-slate-800">{selectedQuote.cleaningDate}</span></div>}{selectedQuote.relatedDate && <div className="text-xs text-slate-500">Related date: <span className="font-medium text-slate-800">{selectedQuote.relatedDate}</span></div>}</div><div className="flex items-end justify-between pt-5"><div className="max-w-[62%] text-[10px] leading-5 text-slate-400">{selectedQuote.note || 'Customer note will appear here.'}</div><div className="text-right"><div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Total</div><div className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{formatMoney(quoteTotal(selectedQuote), settings.currency)}</div></div></div>{(selectedQuote.terms || settings.terms) && <div className="mt-5 border-t border-slate-100 pt-4 text-[10px] leading-5 text-slate-400">{selectedQuote.terms || settings.terms}</div>}</div></section>
-                    </div>
-                  </div>
-                </>}
-              </div>
-            )}
-
-            {view === 'jobs' && (
-              <div className="space-y-5"><section><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Operations queue</div><h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Jobs</h2><p className="mt-2 text-sm text-slate-500">Keep quote-ready work visible until you are ready to schedule and complete it.</p></section><section className="grid gap-3 sm:grid-cols-3">{(['Ready to schedule', 'Scheduled', 'Completed'] as JobStatus[]).map((status) => <div key={status} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{status}</div><div className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{jobs.filter((job) => job.status === status).length}</div></div>)}</section><section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">{jobs.length > 0 ? jobs.map((job) => <div key={job.id} className="flex flex-col gap-4 border-b border-slate-100 px-5 py-5 last:border-0 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><span className="text-xs font-semibold text-slate-900">{job.quoteNumber}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-[9px] font-semibold text-slate-500">{job.status}</span></div><div className="mt-1 text-xs font-medium text-slate-800">{job.customerName || 'Customer missing'}</div><div className="mt-1 text-[11px] text-slate-500">{job.propertySummary || 'Property missing'} · {job.serviceSummary || 'Service scope missing'}</div><div className="mt-1 text-[10px] text-slate-400">Cleaning date · {present(job.cleaningDate)}</div></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setSelectedQuoteId(job.quoteId); setView('quotes'); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600">Open quote</button><select value={job.status} onChange={(event) => updateJobStatus(job.id, event.target.value as JobStatus)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 outline-none"><option>Ready to schedule</option><option>Scheduled</option><option>Completed</option></select></div></div>) : <div className="px-5 py-14 text-center text-xs text-slate-400">Ready quotes can be turned into jobs here. Nothing is scheduled or sent automatically.</div>}</section></div>
-            )}
-
-            {view === 'customers' && (
-              <div className="space-y-5"><section><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Customer directory</div><h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Customers</h2><p className="mt-2 text-sm text-slate-500">A local directory built from the customer details you save on quotes.</p></section><section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">{customers.length > 0 ? <div className="divide-y divide-slate-100">{customers.map((customer) => <div key={customer.name} className="flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><div className="text-sm font-semibold text-slate-900">{customer.name}</div><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500"><span>{customer.email || 'Email missing'}</span><span>{customer.phone || 'Phone missing'}</span></div></div><div className="text-left sm:text-right"><div className="text-xs font-semibold text-slate-800">{customer.quotes} quote{customer.quotes === 1 ? '' : 's'}</div><div className="mt-1 text-[10px] text-slate-400">Last activity · {formatDate(customer.lastActivity)}</div></div></div>)}</div> : <div className="px-5 py-14 text-center text-xs text-slate-400">Customers appear automatically once you save customer details on a quote.</div>}</section></div>
-            )}
-
-            {view === 'settings' && (
-              <div className="space-y-5"><section><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Workspace settings</div><h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Settings</h2><p className="mt-2 text-sm text-slate-500">These settings control the local quote experience on this browser.</p></section><div className="grid gap-5 xl:grid-cols-2"><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-sm font-semibold text-slate-950">Business identity</div><div className="mt-4 space-y-3"><label className="block"><span className="text-xs font-medium text-slate-700">Business name</span><input value={settings.businessName} onChange={(event) => setSettings((current) => ({ ...current, businessName: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label><div className="grid gap-3 sm:grid-cols-2"><label className="block"><span className="text-xs font-medium text-slate-700">Email</span><input value={settings.email} onChange={(event) => setSettings((current) => ({ ...current, email: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label><label className="block"><span className="text-xs font-medium text-slate-700">Phone</span><input value={settings.phone} onChange={(event) => setSettings((current) => ({ ...current, phone: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label></div><label className="block"><span className="text-xs font-medium text-slate-700">Currency</span><select value={settings.currency} onChange={(event) => setSettings((current) => ({ ...current, currency: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white"><option value="USD">USD — US Dollar</option><option value="CAD">CAD — Canadian Dollar</option><option value="GBP">GBP — British Pound</option><option value="EUR">EUR — Euro</option><option value="AUD">AUD — Australian Dollar</option><option value="INR">INR — Indian Rupee</option></select></label></div></section>
-                  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-sm font-semibold text-slate-950">Quote defaults</div><div className="mt-4 space-y-3"><label className="block"><span className="text-xs font-medium text-slate-700">Default customer note</span><textarea value={settings.defaultNote} onChange={(event) => setSettings((current) => ({ ...current, defaultNote: event.target.value }))} className="mt-1 min-h-[140px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-6 outline-none focus:border-teal-300 focus:bg-white" /></label><label className="block"><span className="text-xs font-medium text-slate-700">Default terms</span><textarea value={settings.terms} onChange={(event) => setSettings((current) => ({ ...current, terms: event.target.value }))} className="mt-1 min-h-[120px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-6 outline-none focus:border-teal-300 focus:bg-white" /></label><div className="rounded-xl border border-teal-100 bg-teal-50/70 p-4"><div className="text-xs font-semibold text-teal-900">Local-first storage</div><p className="mt-1 text-[11px] leading-5 text-teal-900/60">Briefs, quotes, jobs, and these settings stay in this browser. Nothing is sent automatically.</p></div></div></section></div></div>
-            )}
+            {view === 'settings' && <div className="space-y-5"><section><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Workspace settings</div><h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Settings</h2><p className="mt-2 text-sm text-slate-500">These settings control the local quote experience in this browser.</p></section><div className="grid gap-5 xl:grid-cols-2"><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-sm font-semibold text-slate-950">Business identity</div><div className="mt-4 space-y-3"><label><span className="text-xs font-medium text-slate-700">Business name</span><input value={settings.businessName} onChange={(event) => setSettings((current) => ({ ...current, businessName: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label><div className="grid gap-3 sm:grid-cols-2"><label><span className="text-xs font-medium text-slate-700">Email</span><input value={settings.email} onChange={(event) => setSettings((current) => ({ ...current, email: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label><label><span className="text-xs font-medium text-slate-700">Phone</span><input value={settings.phone} onChange={(event) => setSettings((current) => ({ ...current, phone: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label></div><label><span className="text-xs font-medium text-slate-700">Currency</span><select value={settings.currency} onChange={(event) => setSettings((current) => ({ ...current, currency: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white"><option value="USD">USD — US Dollar</option><option value="CAD">CAD — Canadian Dollar</option><option value="GBP">GBP — British Pound</option><option value="EUR">EUR — Euro</option><option value="AUD">AUD — Australian Dollar</option><option value="INR">INR — Indian Rupee</option></select></label></div></section><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-sm font-semibold text-slate-950">Quote defaults</div><div className="mt-4 space-y-3"><label><span className="text-xs font-medium text-slate-700">Default customer note</span><textarea value={settings.defaultNote} onChange={(event) => setSettings((current) => ({ ...current, defaultNote: event.target.value }))} className="mt-1 min-h-[130px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-6 outline-none focus:border-teal-300 focus:bg-white" /></label><label><span className="text-xs font-medium text-slate-700">Default terms</span><textarea value={settings.terms} onChange={(event) => setSettings((current) => ({ ...current, terms: event.target.value }))} className="mt-1 min-h-[120px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-6 outline-none focus:border-teal-300 focus:bg-white" /></label><div className="rounded-xl border border-teal-100 bg-teal-50/70 p-4"><div className="text-xs font-semibold text-teal-900">Local-first storage</div><p className="mt-1 text-[11px] leading-5 text-teal-900/60">Briefs, quotes, jobs, and these settings stay in this browser. Nothing is sent automatically.</p></div></div></section></div></div>}
 
             <footer className="mt-7 flex flex-col gap-1 border-t border-slate-200 py-5 text-[10px] text-slate-400 sm:flex-row sm:items-center sm:justify-between"><span>{settings.businessName} · Local operations workspace</span><span>AI intake via your configured Ollama service</span></footer>
           </main>
