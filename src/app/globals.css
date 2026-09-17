@@ -31,17 +31,43 @@ body {
 
 button,
 textarea,
-input {
+input,
+select {
   font: inherit;
 }
 
 button:focus-visible,
 textarea:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 2px solid rgba(13, 148, 136, 0.4);
   outline-offset: 2px;
 }
 
 ::selection {
   background: rgba(20, 184, 166, 0.16);
+}
+
+@media print {
+  @page {
+    margin: 0.5in;
+  }
+
+  body.tasktuck-printing > * {
+    visibility: hidden !important;
+  }
+
+  body.tasktuck-printing .quote-print-area,
+  body.tasktuck-printing .quote-print-area * {
+    visibility: visible !important;
+  }
+
+  body.tasktuck-printing .quote-print-area {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
 }
