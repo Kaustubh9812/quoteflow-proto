@@ -51,11 +51,9 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12 flex flex-col items-center selection:bg-blue-500/30 relative overflow-hidden">
-      {/* Decorative top ambient glow */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-64 bg-gradient-to-b from-blue-500/10 via-transparent to-transparent blur-3xl pointer-events-none" />
 
       <div className="max-w-3xl w-full flex flex-col gap-6 z-10">
-        {/* Main Branding Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div>
             <div className="flex items-center gap-2">
@@ -69,7 +67,6 @@ export default function Home() {
           </div>
           
           <div className="flex items-center gap-3">
-            {/* The Monetization Validation Tracker Trigger Button */}
             <button 
               onClick={() => setShowWaitlist(true)}
               className="text-xs font-bold bg-gradient-to-r from-amber-500 via-orange-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white px-4 py-2 rounded-xl shadow-lg shadow-orange-600/10 transition-all border border-amber-400/20 active:scale-95"
@@ -84,18 +81,17 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Dynamic Demand Capture Modal Box */}
         {showWaitlist && (
           <div className="bg-gradient-to-r from-slate-950 to-slate-900 border border-amber-500/30 rounded-xl p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col gap-3">
             <div className="flex justify-between items-center border-b border-slate-800/60 pb-2">
-              <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+              <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider">
                 ⚡ QuoteFlow Pro Auto-Pilot
               </h3>
               <button 
                 onClick={() => { setShowWaitlist(false); setWaitlistSuccess(false); setWaitlistEmail(''); }} 
                 className="text-slate-500 hover:text-white transition-colors text-xs p-1"
               >
-                ✕ Close Window
+                ✕ Close Window Panel
               </button>
             </div>
             
@@ -128,20 +124,14 @@ export default function Home() {
           </div>
         )}
 
-        {/* Action Panel Grid Layout */}
         <div className="grid grid-cols-1 gap-6">
-          {/* Input Form Panel */}
           <div className="bg-slate-800/40 backdrop-blur-md rounded-xl p-6 border border-slate-800 shadow-xl flex flex-col gap-4">
             <div className="flex justify-between items-start">
               <div>
-                <h2 className="text-sm font-semibold text-slate-200 mb-1">Inbound Lead Source</h2>
+                <h2 className="text-sm font-semibold text-slate-200 mb-1">Inbound Lead Source Pipeline</h2>
                 <p className="text-xs text-slate-400">
                   Paste any unstructured customer email, voicemail transcript, or desk notes below.
                 </p>
-              </div>
-              <div className="flex items-center gap-2 text-[10px] text-slate-400 bg-slate-800/50 px-2 py-1 rounded border border-slate-700/50 sm:hidden">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Llama 3.2
               </div>
             </div>
 
@@ -158,22 +148,11 @@ export default function Home() {
                 disabled={loading}
                 className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-3 px-4 rounded-xl text-sm transition-all shadow-lg shadow-blue-600/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 select-none"
               >
-                {loading ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Executing GPU Inference Run...
-                  </>
-                ) : (
-                  'Process Inquiry & Generate Audit Brief'
-                )}
+                {loading ? 'Executing GPU Inference Run...' : 'Process Inquiry & Generate Audit Brief'}
               </button>
             </form>
           </div>
 
-          {/* System Error Display */}
           {error && (
             <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-xs font-mono flex gap-2 items-start shadow-md">
               <span className="font-bold text-rose-500">[ERROR]</span>
@@ -181,7 +160,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* Premium Formatted Executive Output Result */}
           {result && (
             <div className="bg-gradient-to-b from-slate-800/60 to-slate-800/20 backdrop-blur-md rounded-xl border border-slate-700/40 shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
               <div className="bg-slate-950/40 px-6 py-3.5 border-b border-slate-800 flex items-center justify-between">
@@ -197,16 +175,7 @@ export default function Home() {
                 </button>
               </div>
               <div className="p-6 prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed font-sans shadow-inner">
-                <ReactMarkdown 
-                  components={{
-                    h2: ({ ...props }: ComponentProps) => <h2 className="text-base font-bold text-white mt-4 mb-2 border-b border-slate-800 pb-1 first:mt-0" {...props} />,
-                    strong: ({ ...props }: ComponentProps) => <strong className="text-blue-400 font-semibold" {...props} />,
-                    ul: ({ ...props }: ComponentProps) => <ul className="list-disc pl-5 space-y-1.5 my-3 text-slate-300" {...props} />,
-                    li: ({ ...props }: ComponentProps) => <li className="marker:text-slate-500" {...props} />,
-                  }}
-                >
-                  {result}
-                </ReactMarkdown>
+                <ReactMarkdown>{result}</ReactMarkdown>
               </div>
             </div>
           )}
