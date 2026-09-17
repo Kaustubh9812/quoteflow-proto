@@ -1,6 +1,6 @@
 {
-  "name": "quoteflow-proto",
-  "version": "0.1.0",
+  "name": "tasktuck",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
