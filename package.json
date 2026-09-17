@@ -1,31 +1,43 @@
 {
   "name": "task-tuck",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:vinext": "vinext dev",
     "build": "next build",
+    "build:vinext": "vinext build",
     "start": "next start",
+    "start:vinext": "wrangler dev --config dist/server/wrangler.json",
+    "deploy:vinext": "vinext-cloudflare deploy",
     "lint": "eslint"
   },
   "dependencies": {
+    "@vinext/cloudflare": "1.0.0-beta.4",
     "next": "16.3.5",
     "openai": "^7.15.0",
-    "playwright": "^1.63.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "^10.1.0",
+    "react-server-dom-webpack": "19.2.8",
+    "vinext": "1.0.0-beta.10",
     "xlsx": "^0.18.5",
     "xlsx-populate": "^1.21.0"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "1.54.11",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "6.1.1",
+    "@vitejs/plugin-rsc": "0.5.35",
+    "@types/react": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite": "8.3.0",
+    "wrangler": "4.133.0"
   }
 }
