@@ -1,185 +1,363 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+
+const SAMPLES = [
+  {
+    label: 'Move-out clean',
+    text: 'Hi, I am moving out of my 2 bedroom apartment on October 4th. It is about 1,100 sq ft and mostly empty. I need the kitchen, bathrooms, floors, and inside of the cabinets done. The building has a concierge and there is a loading zone downstairs. Ideally sometime in the morning on October 3rd.',
+  },
+  {
+    label: 'Recurring office',
+    text: 'We run a small 6-person design office, around 1,800 sq ft. We are looking for cleaning every Tuesday and Friday after 6pm. Two bathrooms, kitchenette, open workspace and a couple of meeting rooms. We can provide keys to the cleaner.',
+  },
+  {
+    label: 'Deep clean',
+    text: 'Looking for a deep clean before family visits. Three bedroom house, two bathrooms, lots of pet hair, and the oven needs attention. The house is occupied and we would prefer Saturday afternoon. Can you let me know what you would need from us to quote it?',
+  },
+];
+
+function ClipboardIcon({ copied }: { copied: boolean }) {
+  return copied ? (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+      <path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+      <rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3" fill="none" stroke="currentColor" strokeWidth="1.7" />
+    </svg>
+  );
+}
+
+function TaskTuckMark() {
+  return (
+    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-950 shadow-sm shadow-black/20">
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+        <path d="M6 7.5h12M8.5 4.5h7M8 9v7.25A3.75 3.75 0 0 0 11.75 20h.5A3.75 3.75 0 0 0 16 16.25V9" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+        <path d="M8 11.5h8" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
+
+function ResultMarkdown({ result }: { result: string }) {
+  return (
+    <ReactMarkdown
+      components={{
+        h1: ({ children }) => <h2 className="mb-3 mt-5 text-base font-semibold text-white first:mt-0">{children}</h2>,
+        h2: ({ children }) => <h3 className="mb-2 mt-5 text-sm font-semibold text-white">{children}</h3>,
+        h3: ({ children }) => <h4 className="mb-2 mt-4 text-sm font-semibold text-slate-100">{children}</h4>,
+        p: ({ children }) => <p className="mb-3 leading-7 text-slate-300 last:mb-0">{children}</p>,
+        ul: ({ children }) => <ul className="mb-4 list-disc space-y-2 pl-5 text-slate-300">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-4 list-decimal space-y-2 pl-5 text-slate-300">{children}</ol>,
+        li: ({ children }) => <li className="pl-1 leading-6">{children}</li>,
+        strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+        blockquote: ({ children }) => <blockquote className="my-4 border-l-2 border-cyan-400/50 pl-4 text-slate-300">{children}</blockquote>,
+        code: ({ children }) => <code className="rounded bg-slate-900 px-1.5 py-0.5 text-xs text-cyan-200">{children}</code>,
+      }}
+    >
+      {result}
+    </ReactMarkdown>
+  );
+}
 
 export default function Home() {
   const [inquiry, setInquiry] = useState('');
   const [result, setResult] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showWaitlist, setShowWaitlist] = useState(false);
-  const [waitlistEmail, setWaitlistEmail] = useState('');
-  const [waitlistSuccess, setWaitlistSuccess] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [lastRunAt, setLastRunAt] = useState<Date | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inquiry.trim()) return;
+  const characterCount = inquiry.length;
+  const canSubmit = inquiry.trim().length > 0 && !loading;
+  const statusText = useMemo(() => {
+    if (loading) return 'Processing locally';
+    if (result) return 'Brief ready';
+    return 'Ready for intake';
+  }, [loading, result]);
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        event.preventDefault();
+        const form = document.getElementById('analyze-form') as HTMLFormElement | null;
+        if (form && canSubmit) form.requestSubmit();
+      }
+    };
+
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [canSubmit]);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canSubmit) return;
 
     setLoading(true);
     setResult('');
     setError('');
+    setCopied(false);
 
     try {
       const response = await fetch('/api/analyze', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ inquiry }),
       });
 
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'The local analysis request failed.');
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to process backend request.');
-      }
-
-      setResult(data.result);
-    } catch (err: any) {
-      setError(err.message || 'Something went wrong.');
+      setResult(data.result || 'No structured brief was returned.');
+      setLastRunAt(new Date());
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Something went wrong while processing the inquiry.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleWaitlistSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!waitlistEmail.trim()) return;
-    setWaitlistSuccess(true);
+  const handleCopy = async () => {
+    if (!result) return;
+    try {
+      await navigator.clipboard.writeText(result);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setError('Copy failed. Your browser did not allow clipboard access.');
+    }
+  };
+
+  const resetWorkspace = () => {
+    setInquiry('');
+    setResult('');
+    setError('');
+    setCopied(false);
+    setLastRunAt(null);
   };
 
   return (
-    <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12 flex flex-col items-center selection:bg-blue-500/30 relative overflow-hidden">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-64 bg-gradient-to-b from-blue-500/10 via-transparent to-transparent blur-3xl pointer-events-none" />
+    <main className="min-h-screen bg-[#080b12] text-slate-100 selection:bg-cyan-400/20 selection:text-cyan-100">
+      <div className="pointer-events-none fixed inset-0 -z-0 overflow-hidden">
+        <div className="absolute left-1/2 top-[-18rem] h-[36rem] w-[52rem] -translate-x-1/2 rounded-full bg-cyan-400/8 blur-3xl" />
+        <div className="absolute right-[-10rem] top-[20rem] h-[24rem] w-[24rem] rounded-full bg-violet-500/6 blur-3xl" />
+        <div className="tasktuck-grid absolute inset-0 opacity-[0.16]" />
+      </div>
 
-      <div className="max-w-3xl w-full flex flex-col gap-6 z-10">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-widest bg-blue-500/20 text-blue-400 uppercase border border-blue-500/30">
-                v1.0 Local-GPU
-              </span>
-            </div>
-            <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent mt-1">
-              TaskTuck <span className="text-blue-500 font-medium">Ops</span>
-            </h1>
-          </div>
-          
+      <div className="relative z-10 mx-auto w-full max-w-7xl px-5 pb-10 pt-5 sm:px-8 lg:px-10">
+        <header className="flex items-center justify-between border-b border-white/8 pb-5">
           <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setShowWaitlist(true)}
-              className="text-xs font-bold bg-gradient-to-r from-amber-500 via-orange-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white px-4 py-2 rounded-xl shadow-lg shadow-orange-600/10 transition-all border border-amber-400/20 active:scale-95"
-            >
-              👑 Upgrade to Auto-Pilot ($29/mo)
-            </button>
-
-            <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700/50 hidden sm:flex">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Llama 3.2 Engaged
+            <TaskTuckMark />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold tracking-tight text-white">TaskTuck</span>
+                <span className="rounded-full border border-cyan-300/15 bg-cyan-300/8 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200">Ops</span>
+              </div>
+              <p className="mt-0.5 text-xs text-slate-500">Cleaning operations copilot</p>
             </div>
           </div>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="hidden items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-xs text-slate-400 sm:flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
+              Local AI
+            </div>
+            <div className="rounded-full border border-amber-300/15 bg-amber-300/7 px-3 py-1.5 text-xs font-medium text-amber-200">Pro automation · coming soon</div>
+          </div>
+        </header>
+
+        <section className="grid gap-10 pb-10 pt-12 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-end">
+          <div className="max-w-3xl">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.17em] text-slate-400">
+              Lead intake → quote-ready brief
+            </div>
+            <h1 className="text-4xl font-semibold leading-[1.02] tracking-[-0.045em] text-white sm:text-5xl lg:text-6xl">
+              Turn messy inquiries into <span className="text-cyan-200">actionable jobs.</span>
+            </h1>
+            <p className="mt-5 max-w-2xl text-base leading-7 text-slate-400 sm:text-lg">
+              Paste the customer message exactly as you received it. TaskTuck extracts the details your cleaning team needs to quote, schedule, and follow up.
+            </p>
+          </div>
+
+          <div className="hidden rounded-2xl border border-white/8 bg-white/[0.025] p-4 lg:block">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-slate-300">Workflow</span>
+              <span className="text-slate-500">3 steps</span>
+            </div>
+            <div className="mt-4 space-y-3">
+              {[
+                ['01', 'Capture', 'Keep the original inquiry intact'],
+                ['02', 'Structure', 'Turn free text into a clean brief'],
+                ['03', 'Act', 'Quote, schedule, or reply faster'],
+              ].map(([number, title, copy]) => (
+                <div key={number} className="flex gap-3 rounded-xl border border-white/6 bg-slate-950/40 p-3">
+                  <span className="mt-0.5 font-mono text-[10px] text-cyan-300">{number}</span>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-200">{title}</div>
+                    <div className="mt-0.5 text-[11px] leading-5 text-slate-500">{copy}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <section className="overflow-hidden rounded-3xl border border-white/8 bg-white/[0.035] shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <div className="flex items-center justify-between border-b border-white/7 px-5 py-4 sm:px-6">
+              <div>
+                <div className="text-sm font-semibold text-white">New inquiry</div>
+                <div className="mt-1 text-xs text-slate-500">Email, voicemail transcript, web form, or desk notes</div>
+              </div>
+              <div className="rounded-full border border-white/7 bg-black/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Local processing</div>
+            </div>
+
+            <div className="p-5 sm:p-6">
+              <div className="mb-3 flex flex-wrap gap-2">
+                {SAMPLES.map((sample) => (
+                  <button
+                    key={sample.label}
+                    type="button"
+                    onClick={() => { setInquiry(sample.text); setResult(''); setError(''); }}
+                    className="rounded-full border border-white/8 bg-white/[0.025] px-3 py-1.5 text-xs text-slate-400 transition hover:border-cyan-300/20 hover:bg-cyan-300/7 hover:text-cyan-100"
+                  >
+                    Try {sample.label}
+                  </button>
+                ))}
+              </div>
+
+              <form id="analyze-form" onSubmit={handleSubmit}>
+                <div className="relative">
+                  <textarea
+                    aria-label="Customer inquiry"
+                    className="min-h-[290px] w-full resize-none rounded-2xl border border-white/8 bg-[#060910]/80 p-5 pb-12 text-sm leading-7 text-slate-200 outline-none transition placeholder:text-slate-700 focus:border-cyan-300/30 focus:ring-4 focus:ring-cyan-300/5"
+                    placeholder="Paste a customer inquiry here…"
+                    value={inquiry}
+                    onChange={(event) => setInquiry(event.target.value)}
+                    disabled={loading}
+                  />
+                  <div className="pointer-events-none absolute bottom-4 left-5 right-5 flex items-center justify-between text-[11px] text-slate-600">
+                    <span>Ctrl/⌘ + Enter to analyze</span>
+                    <span>{characterCount.toLocaleString()} characters</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={resetWorkspace}
+                    disabled={loading && !inquiry}
+                    className="order-2 text-xs font-medium text-slate-500 transition hover:text-slate-300 disabled:opacity-30 sm:order-1"
+                  >
+                    Clear workspace
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!canSubmit}
+                    className="order-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-black/20 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-40 sm:order-2"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-slate-950" />
+                        Structuring inquiry…
+                      </>
+                    ) : (
+                      <>
+                        Analyze inquiry
+                        <span aria-hidden="true">↗</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </section>
+
+          <aside className="space-y-6">
+            <div className="rounded-3xl border border-white/8 bg-white/[0.025] p-5 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-white">What gets extracted</div>
+                  <div className="mt-1 text-xs text-slate-500">Designed for cleaning sales + ops</div>
+                </div>
+                <span className="rounded-full border border-emerald-300/15 bg-emerald-300/7 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-200">Core</span>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                {['Customer', 'Property', 'Service scope', 'Timing', 'Access notes', 'Constraints', 'Urgency', 'Quote signals'].map((item) => (
+                  <div key={item} className="rounded-xl border border-white/6 bg-slate-950/40 px-3 py-2.5 text-xs text-slate-400">{item}</div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-cyan-300/10 bg-cyan-300/[0.035] p-5 sm:p-6">
+              <div className="flex items-center gap-2 text-xs font-semibold text-cyan-100">
+                <span className="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,0.5)]" />
+                Built for your existing workflow
+              </div>
+              <p className="mt-3 text-xs leading-6 text-slate-400">
+                Today, TaskTuck turns one messy message into one structured operations brief. The next layer can connect the same workflow to inboxes, quoting, and CRM actions.
+              </p>
+            </div>
+          </aside>
         </div>
 
-        {showWaitlist && (
-          <div className="bg-gradient-to-r from-slate-950 to-slate-900 border border-amber-500/30 rounded-xl p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col gap-3">
-            <div className="flex justify-between items-center border-b border-slate-800/60 pb-2">
-              <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider">
-                ⚡ TaskTuck Pro Auto-Pilot
-              </h3>
-              <button 
-                onClick={() => { setShowWaitlist(false); setWaitlistSuccess(false); setWaitlistEmail(''); }} 
-                className="text-slate-500 hover:text-white transition-colors text-xs p-1"
-              >
-                ✕ Close Window Panel
-              </button>
-            </div>
-            
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Stop copy-pasting customer inquiries manually. The Auto-Pilot integration tier securely connects directly to your active business Gmail or Outlook inbox routing parameters, reading inbound requests and generating structured Operations Briefs inside your CRM automatically.
-            </p>
-
-            {!waitlistSuccess ? (
-              <form onSubmit={handleWaitlistSubmit} className="flex flex-col sm:flex-row gap-2 mt-1">
-                <input 
-                  type="email" 
-                  required
-                  placeholder="Enter your operational business email..." 
-                  className="bg-slate-950/80 border border-slate-800 rounded-lg px-3 py-2 text-xs flex-1 outline-none focus:border-amber-500/50 text-slate-200 placeholder:text-slate-600 transition-colors shadow-inner"
-                  value={waitlistEmail}
-                  onChange={(e) => setWaitlistEmail(e.target.value)}
-                />
-                <button 
-                  type="submit" 
-                  className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold px-4 py-2 rounded-lg text-xs transition-all shadow-md active:scale-98"
-                >
-                  Lock Early Access Pricing
-                </button>
-              </form>
-            ) : (
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs font-medium animate-in fade-in duration-200">
-                ✓ Access Locked! Early-bird pricing parameters registered. We will contact you at <span className="underline font-bold text-white">{waitlistEmail}</span> as soon as your secure inbox sync module finishes staging.
-              </div>
-            )}
+        {error && (
+          <div className="mt-6 rounded-2xl border border-rose-300/10 bg-rose-300/[0.04] px-4 py-3 text-sm text-rose-200">
+            <span className="mr-2 font-semibold text-rose-300">Couldn’t process that.</span>
+            <span className="break-all text-rose-200/75">{error}</span>
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-6">
-          <div className="bg-slate-800/40 backdrop-blur-md rounded-xl p-6 border border-slate-800 shadow-xl flex flex-col gap-4">
-            <div className="flex justify-between items-start">
+        <section className={`mt-6 overflow-hidden rounded-3xl border border-white/8 bg-white/[0.035] shadow-2xl shadow-black/20 backdrop-blur-xl transition-all ${result ? 'opacity-100' : 'opacity-70'}`}>
+          <div className="flex flex-col gap-3 border-b border-white/7 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-300/10 bg-emerald-300/7 text-emerald-200">
+                <span className="text-sm">✓</span>
+              </div>
               <div>
-                <h2 className="text-sm font-semibold text-slate-200 mb-1">Inbound Lead Source Pipeline</h2>
-                <p className="text-xs text-slate-400">
-                  Paste any unstructured customer email, voicemail transcript, or desk notes below.
-                </p>
+                <div className="text-sm font-semibold text-white">Operations brief</div>
+                <div className="mt-0.5 text-xs text-slate-500">{statusText}{lastRunAt ? ` · ${lastRunAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}</div>
               </div>
             </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <textarea
-                className="w-full h-44 p-4 bg-slate-950/60 border border-slate-800 rounded-xl focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 outline-none text-sm text-slate-300 resize-none transition-all placeholder:text-slate-600 font-sans shadow-inner"
-                placeholder="Example: Paste messy customer email details here..."
-                value={inquiry}
-                onChange={(e) => setInquiry(e.target.value)}
-              />
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-3 px-4 rounded-xl text-sm transition-all shadow-lg shadow-blue-600/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 select-none"
-              >
-                {loading ? 'Executing GPU Inference Run...' : 'Process Inquiry & Generate Audit Brief'}
-              </button>
-            </form>
+            <div className="flex items-center gap-2">
+              {result && (
+                <button type="button" onClick={handleCopy} className="inline-flex items-center gap-2 rounded-lg border border-white/8 bg-white/[0.025] px-3 py-2 text-xs font-medium text-slate-400 transition hover:border-white/15 hover:text-white">
+                  <ClipboardIcon copied={copied} />
+                  {copied ? 'Copied' : 'Copy brief'}
+                </button>
+              )}
+              {result && (
+                <button type="button" onClick={resetWorkspace} className="rounded-lg border border-white/8 bg-white/[0.025] px-3 py-2 text-xs font-medium text-slate-400 transition hover:border-white/15 hover:text-white">
+                  New inquiry
+                </button>
+              )}
+            </div>
           </div>
 
-          {error && (
-            <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-xs font-mono flex gap-2 items-start shadow-md">
-              <span className="font-bold text-rose-500">[ERROR]</span>
-              <p className="break-all">{error}</p>
-            </div>
-          )}
+          <div className="min-h-[250px] px-5 py-6 sm:px-7">
+            {result ? (
+              <div className="max-w-4xl text-sm">
+                <ResultMarkdown result={result} />
+              </div>
+            ) : (
+              <div className="flex min-h-[205px] items-center justify-center text-center">
+                <div className="max-w-md">
+                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.025] text-slate-600">✦</div>
+                  <div className="mt-4 text-sm font-medium text-slate-400">Your structured brief will appear here</div>
+                  <p className="mt-2 text-xs leading-6 text-slate-600">Customer, property, scope, timing, access notes, constraints, and follow-up signals — ready for the next action.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
 
-          {result && (
-            <div className="bg-gradient-to-b from-slate-800/60 to-slate-800/20 backdrop-blur-md rounded-xl border border-slate-700/40 shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="bg-slate-950/40 px-6 py-3.5 border-b border-slate-800 flex items-center justify-between">
-                <span className="text-xs font-bold tracking-wider text-emerald-400 uppercase flex items-center gap-1.5">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  ⚡ Automated Operations Brief
-                </span>
-                <button 
-                  onClick={() => navigator.clipboard.writeText(result)}
-                  className="text-[11px] text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 border border-slate-700 transition-colors"
-                >
-                  Copy Raw Output Brief
-                </button>
-              </div>
-              <div className="p-6 prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed font-sans shadow-inner">
-                <ReactMarkdown>{result}</ReactMarkdown>
-              </div>
-            </div>
-          )}
-        </div>
+        <footer className="flex flex-col gap-2 border-t border-white/7 pt-6 text-[11px] text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+          <span>TaskTuck · Cleaning operations copilot</span>
+          <span>Local AI workflow · v2 prototype</span>
+        </footer>
       </div>
     </main>
   );
