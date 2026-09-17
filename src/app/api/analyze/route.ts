@@ -1,59 +1,102 @@
 import { NextResponse } from 'next/server';
 
+const DEFAULT_MODEL = 'llama3.2';
+const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
+
+const SYSTEM_PROMPT = `You are TaskTuck, a cleaning-operations intake assistant.
+Your job is to turn messy customer inquiries into a concise, quote-ready operations brief for a professional cleaning company.
+
+Extract only information supported by the customer message. Do not invent prices, square footage, room counts, dates, access details, or services. Mark unknown items as "Not provided".
+
+Return markdown with these sections in this order:
+## Customer
+- Name / contact details if provided
+
+## Property
+- Property type, size, rooms, occupancy, and other useful context
+
+## Service scope
+- Requested cleaning services and any special tasks
+
+## Timing & access
+- Requested date/time, frequency, entry instructions, parking, keys, concierge, or other logistics
+
+## Constraints & signals
+- Pets, urgency, condition, special requests, questions, or anything that could affect quoting
+
+## Follow-up checklist
+- The specific missing details the operator should confirm before quoting or scheduling
+
+Keep the brief practical and easy to scan. Do not provide a final price unless the customer explicitly supplied one.`;
+
 export async function POST(request: Request) {
   try {
-    const { inquiry } = await request.json();
+    const body = await request.json();
+    const inquiry = typeof body?.inquiry === 'string' ? body.inquiry.trim() : '';
 
     if (!inquiry) {
-      return NextResponse.json({ error: 'Inquiry text is completely empty' }, { status: 400 });
+      return NextResponse.json({ error: 'Please paste a customer inquiry first.' }, { status: 400 });
     }
 
-    console.log("--> Backend route triggered! Sending text to local Ollama server...");
+    if (inquiry.length > 20000) {
+      return NextResponse.json({ error: 'That inquiry is too long. Keep it under 20,000 characters.' }, { status: 413 });
+    }
 
-    // Fetch call directly to the background service port
-    const response = await fetch("http://localhost:11434/api/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+    const ollamaUrl = (process.env.OLLAMA_URL || DEFAULT_OLLAMA_URL).replace(/\/$/, '');
+    const model = process.env.OLLAMA_MODEL || DEFAULT_MODEL;
+
+    const response = await fetch(`${ollamaUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: "llama3.2",
+        model,
         messages: [
-          {
-            role: "system",
-            content: "You are an expert operations assistant for a professional cleaning company. Analyze the customer inquiry and extract key details."
-          },
-          {
-            role: "user",
-            content: inquiry
-          }
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: inquiry },
         ],
-        stream: false
-      })
+        stream: false,
+        options: {
+          temperature: 0.2,
+        },
+      }),
     });
-
-    console.log("--> Ollama responded with status code:", response.status);
 
     const rawText = await response.text();
 
     if (!response.ok) {
-      console.error("--> Ollama returned a bad status code text:", rawText);
-      return NextResponse.json({ error: `Ollama status error (${response.status}): ${rawText}` }, { status: 500 });
+      let detail = rawText;
+      try {
+        const parsed = JSON.parse(rawText);
+        detail = parsed.error || rawText;
+      } catch {
+        // Keep the original response text when Ollama does not return JSON.
+      }
+      return NextResponse.json(
+        { error: `Local AI request failed (${response.status}): ${detail}` },
+        { status: 502 },
+      );
     }
 
     try {
       const data = JSON.parse(rawText);
-      const resultText = data.message?.content || 'No text response generated.';
-      return NextResponse.json({ result: resultText });
-    } catch (parseError) {
-      console.error("--> Failed to parse Ollama text as JSON. Raw text was:", rawText);
-      return NextResponse.json({ error: `Ollama sent non-JSON text: ${rawText.substring(0, 100)}` }, { status: 500 });
+      const result = typeof data.message?.content === 'string' ? data.message.content.trim() : '';
+
+      if (!result) {
+        return NextResponse.json({ error: 'The local AI model returned an empty brief.' }, { status: 502 });
+      }
+
+      return NextResponse.json({ result, model });
+    } catch {
+      return NextResponse.json(
+        { error: 'The local AI server returned an unreadable response.' },
+        { status: 502 },
+      );
     }
-    
-  } catch (error: any) {
-    console.error('--> CRITICAL BACKEND EXCEPTION:', error);
-    return NextResponse.json({ 
-      error: `Internal server connect error: ${error.message || 'Check your VS Code terminal log!'}` 
-    }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown server error';
+    return NextResponse.json(
+      { error: `Could not reach the local AI service. Make sure Ollama is running. (${message})` },
+      { status: 503 },
+    );
   }
 }
