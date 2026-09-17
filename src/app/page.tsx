@@ -31,6 +31,14 @@ type BriefSection = {
   items: string[];
 };
 
+type QuoteDraft = {
+  jobId: string;
+  basePrice: string;
+  extras: string;
+  customerNote: string;
+  savedAt: number;
+};
+
 const STORAGE_KEY = 'tasktuck-recent-briefs';
 const MAX_RECENT_JOBS = 8;
 const BRIEF_SECTIONS = ['Customer', 'Property', 'Service scope', 'Timing & access', 'Constraints & signals', 'Follow-up checklist'];
@@ -61,11 +69,23 @@ function parseBrief(result: string): BriefSection[] {
     if (current && line) current.items.push(line);
   }
 
-  return sections.length > 0 ? sections : [{ title: 'Operations brief', items: result.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) }];
+  return sections.length > 0
+    ? sections
+    : [{ title: 'Operations brief', items: result.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) }];
 }
 
 function getSection(sections: BriefSection[], title: string) {
   return sections.find((section) => section.title.toLowerCase() === title.toLowerCase());
+}
+
+function valueAfterLabel(items: string[], label: string) {
+  const match = items.find((item) => item.toLowerCase().startsWith(`${label.toLowerCase()}:`));
+  return match ? match.slice(label.length + 1).trim() : '';
+}
+
+function presentValue(value: string) {
+  if (!value || /^not provided$/i.test(value.trim())) return 'Missing';
+  return value;
 }
 
 function Icon({ name }: { name: 'inbox' | 'quote' | 'jobs' | 'customers' | 'settings' | 'plus' | 'copy' | 'download' | 'spark' | 'arrow' | 'check' | 'back' | 'edit' }) {
@@ -132,8 +152,27 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(recentJobs.slice(0, MAX_RECENT_JOBS)));
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(recentJobs.slice(0, MAX_RECENT_JOBS)));
+    } catch {
+      // Ignore storage failures and keep the active workspace usable.
+    }
   }, [recentJobs]);
+
+  useEffect(() => {
+    if (workspace !== 'quote' || !activeJobId) return;
+    try {
+      const stored = window.localStorage.getItem(`tasktuck-quote-draft-${activeJobId}`);
+      if (!stored) return;
+      const draft: QuoteDraft = JSON.parse(stored);
+      setBasePrice(typeof draft.basePrice === 'string' ? draft.basePrice : '');
+      setExtras(typeof draft.extras === 'string' ? draft.extras : '');
+      setCustomerNote(typeof draft.customerNote === 'string' ? draft.customerNote : '');
+      setQuoteSaved(true);
+    } catch {
+      setQuoteSaved(false);
+    }
+  }, [workspace, activeJobId]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -162,8 +201,41 @@ export default function Home() {
   const customerItems = useMemo(() => getSection(sections, 'Customer')?.items ?? [], [sections]);
   const constraintsItems = useMemo(() => getSection(sections, 'Constraints & signals')?.items ?? [], [sections]);
 
+  const customerName = useMemo(() => {
+    const raw = valueAfterLabel(customerItems, 'Name / contact details');
+    if (!raw || /^not provided$/i.test(raw)) return '';
+    const cleaned = raw.split(/[,\-–]/)[0].trim();
+    return cleaned && !/^missing$/i.test(cleaned) ? cleaned : '';
+  }, [customerItems]);
+
+  const propertyType = valueAfterLabel(propertyItems, 'Property type');
+  const propertySize = valueAfterLabel(propertyItems, 'Size');
+  const roomCount = valueAfterLabel(propertyItems, 'Rooms');
+  const cleaningDate = valueAfterLabel(timingItems, 'Requested date/time');
+  const requestedDate = valueAfterLabel(timingItems, 'Requested date');
+  const accessDetails = timingItems.filter((item) => /access|concierge|loading|entry|parking|keys/i.test(item));
   const total = (Number.parseFloat(basePrice) || 0) + (Number.parseFloat(extras) || 0);
-  const totalLabel = total > 0 ? total.toLocaleString(undefined, { style: 'currency', currency: 'USD' }) : '$0.00';
+  const totalLabel = total.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+  const checkedCount = followUpItems.filter((item) => checkedFollowUps[item]).length;
+  const allChecksDone = followUpItems.length > 0 && checkedCount === followUpItems.length;
+
+  const quoteTitle = serviceItems.find((item) => /requested cleaning services|requested services/i.test(item))
+    ? 'Cleaning service quote'
+    : 'Cleaning quote';
+
+  const generatedNote = useMemo(() => {
+    const greeting = customerName ? `Hi ${customerName.split(/\s+/)[0]},` : 'Hi there,';
+    const scope = serviceItems
+      .filter((item) => !/^special tasks:\s*not provided$/i.test(item))
+      .slice(0, 4)
+      .join(', ')
+      .replace(/^Requested cleaning services:\s*/i, '');
+    const scopeSentence = scope ? ` We reviewed the requested scope including ${scope.toLowerCase()}.` : ' We reviewed the cleaning details you sent over.';
+    const priceSentence = total > 0
+      ? ` The current quote draft total is ${totalLabel}.`
+      : ' We are reviewing the remaining details before confirming pricing.';
+    return `${greeting}\n\nThanks for reaching out.${scopeSentence}${priceSentence}\n\nThanks,\nTaskTuck`;
+  }, [customerName, serviceItems, total, totalLabel]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -175,6 +247,9 @@ export default function Home() {
     setWorkspace('intake');
     setCheckedFollowUps({});
     setQuoteSaved(false);
+    setBasePrice('');
+    setExtras('');
+    setCustomerNote('');
 
     try {
       const response = await fetch('/api/analyze', {
@@ -280,19 +355,31 @@ export default function Home() {
 
   const saveQuoteDraft = () => {
     if (!activeJobId) return;
-    const payload = {
+    const payload: QuoteDraft = {
       jobId: activeJobId,
       basePrice,
       extras,
       customerNote,
       savedAt: Date.now(),
     };
-    window.localStorage.setItem(`tasktuck-quote-draft-${activeJobId}`, JSON.stringify(payload));
-    setQuoteSaved(true);
+    try {
+      window.localStorage.setItem(`tasktuck-quote-draft-${activeJobId}`, JSON.stringify(payload));
+      setQuoteSaved(true);
+    } catch {
+      setError('The quote could not be saved in this browser.');
+    }
   };
 
-  const customerGreeting = customerItems[0] && !customerItems[0].startsWith('Name /') ? customerItems[0] : '';
-  const generatedNote = customerGreeting ? `Hi ${customerGreeting.split(/[,\-–]/)[0].trim()},\n\nThanks for reaching out. We reviewed the cleaning details you sent over${serviceItems[0] ? ` for ${serviceItems[0].replace(/^Requested services:\s*/i, '').toLowerCase()}` : ''}. ${total > 0 ? `The quote for this scope is ${totalLabel}.` : 'We are reviewing the scope and will confirm pricing once the remaining details are confirmed.'}\n\nThanks,\nTaskTuck` : `Hi,\n\nThanks for reaching out. We reviewed the cleaning details you sent over. ${total > 0 ? `The quote for this scope is ${totalLabel}.` : 'We are reviewing the scope and will confirm pricing once the remaining details are confirmed.'}\n\nThanks,\nTaskTuck`;
+  const copyCustomerNote = async () => {
+    const note = customerNote || generatedNote;
+    try {
+      await navigator.clipboard.writeText(note);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setError('Copy failed. Your browser did not allow clipboard access.');
+    }
+  };
 
   return (
     <main className="min-h-screen bg-[#f5f7f8] text-slate-900">
@@ -365,8 +452,8 @@ export default function Home() {
             <section className="mb-6 flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full bg-teal-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">{workspace === 'quote' ? 'Operations brief → quote preparation' : 'Customer message → operations brief'}</div>
-                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">{workspace === 'quote' ? 'Turn the brief into a quote-ready draft.' : 'Prepare the next quote without digging through messages.'}</h2>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{workspace === 'quote' ? 'Review the extracted scope, confirm anything missing, and add your pricing before sending a customer-facing note.' : 'Paste the inquiry as-is. TaskTuck structures the customer, property, scope, timing, access notes, and follow-up items your team needs.'}</p>
+                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">{workspace === 'quote' ? 'Finish the quote draft with the scope in front of you.' : 'Prepare the next quote without digging through messages.'}</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{workspace === 'quote' ? 'Review the scope, clear the operator checks you can confirm, add your price, and preview the customer-facing draft.' : 'Paste the inquiry as-is. TaskTuck structures the customer, property, scope, timing, access notes, and follow-up items your team needs.'}</p>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {[
@@ -480,20 +567,16 @@ export default function Home() {
                   <div className="px-5 py-6 sm:px-7">
                     {result ? (
                       <div className="space-y-4">
-                        <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-xs text-emerald-900">
-                          <span className="font-semibold">Brief ready.</span> Review the extracted details below, then move into quote prep when the scope looks right.
-                        </div>
+                        <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-xs text-emerald-900"><span className="font-semibold">Brief ready.</span> Review the extracted details below, then move into quote prep when the scope looks right.</div>
                         <div className="grid gap-3 md:grid-cols-2">
                           {sections.filter((section) => section.title !== 'Follow-up checklist').map((section) => (
                             <section key={section.title} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
                               <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{section.title}</div>
                               {section.items.length > 0 ? (
                                 <div className="mt-3 space-y-2">
-                                  {section.items.map((item, index) => <p key={`${section.title}-${index}`} className="text-xs leading-5 text-slate-700">{item}</p>)}
+                                  {section.items.map((item, index) => <p key={`${section.title}-${index}`} className={`text-xs leading-5 ${/not provided/i.test(item) ? 'text-slate-400' : 'text-slate-700'}`}>{item.replace(/Not provided/gi, 'Missing')}</p>)}
                                 </div>
-                              ) : (
-                                <p className="mt-3 text-xs text-slate-400">Not provided</p>
-                              )}
+                              ) : <p className="mt-3 text-xs text-slate-400">Missing</p>}
                             </section>
                           ))}
                         </div>
@@ -505,7 +588,7 @@ export default function Home() {
                                 <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Follow-up before pricing</div>
                                 <p className="mt-1 text-xs text-amber-900/70">Confirm these items before treating the brief as complete.</p>
                               </div>
-                              <span className="rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold text-amber-700">{followUpItems.filter((item) => checkedFollowUps[item]).length}/{followUpItems.length}</span>
+                              <span className="rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold text-amber-700">{checkedCount}/{followUpItems.length}</span>
                             </div>
                             <div className="mt-3 grid gap-2 md:grid-cols-2">
                               {followUpItems.map((item) => (
@@ -531,94 +614,156 @@ export default function Home() {
                 </section>
               </>
             ) : (
-              <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><Icon name="quote" /></div>
-                    <div>
-                      <div className="text-sm font-semibold text-slate-950">Quote preparation</div>
-                      <div className="mt-0.5 text-[11px] text-slate-500">Review the AI brief, add pricing, and draft the customer note.</div>
-                    </div>
-                  </div>
-                  <button type="button" onClick={() => setWorkspace('intake')} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"><Icon name="back" />Back to brief</button>
-                </div>
+              <>
+                {error && <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800"><span className="font-semibold">Couldn’t save that.</span> <span className="break-all text-rose-700/80">{error}</span></div>}
 
                 {result ? (
-                  <div className="grid gap-5 p-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
+                  <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
                     <div className="space-y-5">
-                      <section className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-                        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Scope snapshot</div>
-                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                          <div><div className="text-[10px] font-semibold text-slate-400">Customer</div><div className="mt-1 text-xs leading-5 text-slate-700">{customerItems[0] || 'Not provided'}</div></div>
-                          <div><div className="text-[10px] font-semibold text-slate-400">Property</div><div className="mt-1 text-xs leading-5 text-slate-700">{propertyItems.join(' · ') || 'Not provided'}</div></div>
-                          <div><div className="text-[10px] font-semibold text-slate-400">Service scope</div><div className="mt-1 text-xs leading-5 text-slate-700">{serviceItems.join(' · ') || 'Not provided'}</div></div>
-                          <div><div className="text-[10px] font-semibold text-slate-400">Timing & access</div><div className="mt-1 text-xs leading-5 text-slate-700">{timingItems.join(' · ') || 'Not provided'}</div></div>
-                        </div>
-                      </section>
-
-                      <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-                        <div className="flex items-center justify-between gap-3">
+                      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Operator checks</div>
-                            <p className="mt-1 text-xs text-amber-900/70">Keep unresolved details visible while pricing.</p>
+                            <div className="text-sm font-semibold text-slate-950">Quote editor</div>
+                            <div className="mt-0.5 text-[11px] text-slate-500">Pricing stays manual. The extracted brief is read-only here.</div>
                           </div>
-                          <span className="text-[10px] font-semibold text-amber-700">{followUpItems.filter((item) => checkedFollowUps[item]).length}/{followUpItems.length || 0} done</span>
+                          <button type="button" onClick={() => setWorkspace('intake')} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"><Icon name="back" />Back to brief</button>
                         </div>
-                        <div className="mt-3 space-y-2">
-                          {followUpItems.length > 0 ? followUpItems.map((item) => (
-                            <label key={item} className="flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200/80 bg-white/70 px-3 py-2.5">
-                              <input type="checkbox" checked={Boolean(checkedFollowUps[item])} onChange={() => toggleFollowUp(item)} className="mt-0.5 accent-teal-600" />
-                              <span className={`text-xs leading-5 ${checkedFollowUps[item] ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{item}</span>
-                            </label>
-                          )) : <div className="rounded-lg bg-white/70 px-3 py-3 text-xs text-slate-500">No explicit follow-up items were returned.</div>}
+
+                        <div className="p-5">
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Customer</div>
+                              <div className={`mt-2 text-sm font-semibold ${customerName ? 'text-slate-900' : 'text-slate-400'}`}>{customerName || 'Customer name missing'}</div>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Cleaning date</div>
+                              <div className={`mt-2 text-sm font-semibold ${cleaningDate ? 'text-slate-900' : 'text-slate-400'}`}>{presentValue(cleaningDate || requestedDate)}</div>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 sm:col-span-2">
+                              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Property</div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {[propertyType, propertySize, roomCount].filter(Boolean).map((value) => <span key={value} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-700">{presentValue(value)}</span>)}
+                                {accessDetails.slice(0, 2).map((value) => <span key={value} className="rounded-full border border-teal-100 bg-teal-50 px-2.5 py-1 text-[11px] text-teal-800">{value}</span>)}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Operator checks</div>
+                                <p className="mt-1 text-xs text-amber-900/70">Resolve these before treating the quote as complete.</p>
+                              </div>
+                              <span className={`rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold ${allChecksDone ? 'text-emerald-700' : 'text-amber-700'}`}>{checkedCount}/{followUpItems.length} done</span>
+                            </div>
+                            <div className="mt-3 space-y-2">
+                              {followUpItems.length > 0 ? followUpItems.map((item) => (
+                                <label key={item} className="flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200/80 bg-white/70 px-3 py-2.5">
+                                  <input type="checkbox" checked={Boolean(checkedFollowUps[item])} onChange={() => toggleFollowUp(item)} className="mt-0.5 accent-teal-600" />
+                                  <span className={`text-xs leading-5 ${checkedFollowUps[item] ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{item}</span>
+                                </label>
+                              )) : <div className="rounded-lg bg-white/70 px-3 py-3 text-xs text-slate-500">No explicit follow-up items were returned.</div>}
+                            </div>
+                          </div>
+
+                          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-semibold text-slate-900">Scope</div>
+                                <div className="mt-0.5 text-[11px] text-slate-500">Taken directly from the operations brief.</div>
+                              </div>
+                              <Icon name="edit" />
+                            </div>
+                            <div className="mt-3 space-y-2">
+                              {serviceItems.length > 0 ? serviceItems.map((item) => <div key={item} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs leading-5 text-slate-700">{item}</div>) : <div className="text-xs text-slate-400">Missing</div>}
+                            </div>
+                          </div>
                         </div>
                       </section>
 
-                      <section className="rounded-xl border border-slate-200 bg-white p-4">
-                        <div className="flex items-center justify-between gap-3">
+                      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
                           <div>
-                            <div className="text-sm font-semibold text-slate-900">Constraints & signals</div>
-                            <div className="mt-0.5 text-[11px] text-slate-500">Keep anything that can change the job scope visible.</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Pricing</div>
+                            <div className="mt-1 text-[11px] text-slate-500">Enter the numbers you use for this job.</div>
                           </div>
-                          <Icon name="edit" />
+                          {quoteSaved && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700"><Icon name="check" />Draft saved</span>}
                         </div>
-                        <div className="mt-3 space-y-2">
-                          {constraintsItems.length > 0 ? constraintsItems.map((item, index) => <div key={index} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-700">{item}</div>) : <div className="text-xs text-slate-400">Not provided</div>}
-                        </div>
-                      </section>
-                    </div>
-
-                    <div className="space-y-5">
-                      <section className="rounded-xl border border-slate-200 bg-white p-5">
-                        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Pricing</div>
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
                           <label className="block"><span className="text-xs font-medium text-slate-700">Base service</span><div className="mt-1 flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3"><span className="text-xs text-slate-400">$</span><input inputMode="decimal" value={basePrice} onChange={(event) => { setBasePrice(event.target.value); setQuoteSaved(false); }} placeholder="0.00" className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-900 outline-none" /></div></label>
                           <label className="block"><span className="text-xs font-medium text-slate-700">Extras / add-ons</span><div className="mt-1 flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3"><span className="text-xs text-slate-400">$</span><input inputMode="decimal" value={extras} onChange={(event) => { setExtras(event.target.value); setQuoteSaved(false); }} placeholder="0.00" className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-900 outline-none" /></div></label>
                         </div>
-                        <div className="mt-5 rounded-xl bg-slate-950 p-4 text-white">
-                          <div className="text-[10px] uppercase tracking-[0.14em] text-white/50">Quote total</div>
-                          <div className="mt-1 text-3xl font-semibold tracking-tight">{totalLabel}</div>
-                          <div className="mt-1 text-[10px] text-white/45">Manual pricing · no automatic tax or fees</div>
+                        <div className="mt-5 flex items-end justify-between rounded-xl bg-slate-950 p-4 text-white">
+                          <div>
+                            <div className="text-[10px] uppercase tracking-[0.14em] text-white/50">Quote total</div>
+                            <div className="mt-1 text-3xl font-semibold tracking-tight">{totalLabel}</div>
+                            <div className="mt-1 text-[10px] text-white/45">Manual pricing · no automatic tax or fees</div>
+                          </div>
+                          <button type="button" onClick={saveQuoteDraft} className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-[11px] font-semibold text-slate-950 transition hover:bg-slate-100"><Icon name="check" />Save draft</button>
+                        </div>
+                      </section>
+                    </div>
+
+                    <div className="space-y-5">
+                      <section className="rounded-2xl border border-slate-300 bg-white shadow-sm">
+                        <div className="border-b border-slate-200 px-5 py-4">
+                          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Live customer preview</div>
+                          <div className="mt-1 text-sm font-semibold text-slate-950">What the customer-facing draft will look like</div>
+                        </div>
+                        <div className="p-5">
+                          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-5">
+                              <div>
+                                <div className="text-lg font-semibold tracking-tight text-slate-950">TaskTuck</div>
+                                <div className="mt-1 text-[11px] text-slate-500">Cleaning service quote</div>
+                              </div>
+                              <div className="text-right text-[10px] text-slate-400">Draft preview</div>
+                            </div>
+                            <div className="mt-5">
+                              <div className="text-sm font-semibold text-slate-950">{quoteTitle}</div>
+                              <div className="mt-1 text-[11px] text-slate-500">{propertyType || 'Property'} · {propertySize || 'Size missing'} {roomCount ? `· ${roomCount}` : ''}</div>
+                            </div>
+                            <div className="mt-5 space-y-2 border-y border-slate-100 py-4">
+                              {serviceItems.filter((item) => !/^requested cleaning services:\s*$/i.test(item)).slice(0, 6).map((item) => <div key={item} className="flex gap-2 text-xs text-slate-700"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500" />{item}</div>)}
+                              {cleaningDate && <div className="pt-1 text-xs text-slate-500">Cleaning date: <span className="font-medium text-slate-800">{cleaningDate}</span></div>}
+                              {requestedDate && <div className="text-xs text-slate-500">Related date: <span className="font-medium text-slate-800">{requestedDate}</span></div>}
+                            </div>
+                            <div className="flex items-end justify-between pt-5">
+                              <div className="text-[10px] text-slate-400">Prepared from reviewed job scope</div>
+                              <div className="text-right"><div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Total</div><div className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{totalLabel}</div></div>
+                            </div>
+                          </div>
                         </div>
                       </section>
 
-                      <section className="rounded-xl border border-slate-200 bg-white p-5">
-                        <div className="flex items-center justify-between"><div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Customer note</div><div className="mt-1 text-[11px] text-slate-500">Edit before sending from your own channel.</div></div><button type="button" onClick={() => setCustomerNote(generatedNote)} className="text-[10px] font-semibold text-teal-700 hover:text-teal-800">Use template</button></div>
-                        <textarea value={customerNote} onChange={(event) => { setCustomerNote(event.target.value); setQuoteSaved(false); }} placeholder="Draft a customer-facing note here…" className="mt-4 min-h-[190px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-teal-300 focus:bg-white focus:ring-4 focus:ring-teal-500/10" />
-                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><span className="text-[10px] text-slate-400">Nothing is sent automatically.</span><button type="button" onClick={saveQuoteDraft} className="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-teal-700">{quoteSaved ? <><Icon name="check" />Saved in browser</> : <>Save quote draft <Icon name="arrow" /></>}</button></div>
+                      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Customer note</div>
+                            <div className="mt-1 text-[11px] text-slate-500">Edit before sending from your own channel.</div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button type="button" onClick={() => { setCustomerNote(generatedNote); setQuoteSaved(false); }} className="text-[10px] font-semibold text-teal-700 hover:text-teal-800">Use template</button>
+                            <button type="button" onClick={copyCustomerNote} className="text-[10px] font-semibold text-slate-500 hover:text-slate-800">{copied ? 'Copied' : 'Copy note'}</button>
+                          </div>
+                        </div>
+                        <textarea value={customerNote} onChange={(event) => { setCustomerNote(event.target.value); setQuoteSaved(false); }} placeholder="Draft a customer-facing note here…" className="mt-4 min-h-[180px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-teal-300 focus:bg-white focus:ring-4 focus:ring-teal-500/10" />
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><span className="text-[10px] text-slate-400">Nothing is sent automatically.</span><button type="button" onClick={saveQuoteDraft} className="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-teal-700"><Icon name={quoteSaved ? 'check' : 'arrow'} />{quoteSaved ? 'Saved in browser' : 'Save quote draft'}</button></div>
                       </section>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex min-h-[320px] items-center justify-center text-center">
-                    <div className="max-w-md"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><Icon name="quote" /></div><div className="mt-4 text-sm font-semibold text-slate-700">Analyze an inquiry first</div><p className="mt-1.5 text-xs leading-5 text-slate-400">Once a brief is ready, TaskTuck can hand the extracted scope into quote preparation.</p><button type="button" onClick={() => setWorkspace('intake')} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white"><Icon name="back" />Back to intake</button></div>
-                  </div>
+                  <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="flex min-h-[320px] items-center justify-center text-center">
+                      <div className="max-w-md"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><Icon name="quote" /></div><div className="mt-4 text-sm font-semibold text-slate-700">Analyze an inquiry first</div><p className="mt-1.5 text-xs leading-5 text-slate-400">Once a brief is ready, TaskTuck can hand the reviewed scope into quote preparation.</p><button type="button" onClick={() => setWorkspace('intake')} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white"><Icon name="back" />Back to intake</button></div>
+                    </div>
+                  </section>
                 )}
-              </section>
+              </>
             )}
 
             <footer className="flex flex-col gap-1 border-t border-slate-200 py-5 text-[10px] text-slate-400 sm:flex-row sm:items-center sm:justify-between">
-              <span>TaskTuck · {workspace === 'quote' ? 'Quote prep' : 'Intake desk'}</span>
+              <span>TaskTuck · Intake desk</span>
               <span>Local-first workflow · Current release</span>
             </footer>
           </main>
