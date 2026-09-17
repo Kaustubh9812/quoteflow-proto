@@ -1,14 +1,15 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const fs = require('fs');
 const path = require('path');
 const XLSX = require('xlsx');
 
 // CONFIGURATION: Set your input file name here!
-const RAW_INPUT_FILE = 'raw_scraped_data.xlsx'; 
+const RAW_INPUT_FILE = 'raw_scraped_data.xlsx';
 const CLEAN_OUTPUT_FILE = 'Scraped_US_Cleaning_Leads.xlsx';
 
 function cleanRawDataPipeline() {
   console.log("🧼 Initializing Enterprise Excel Raw Data Cleaner Node...");
-  
+
   const rawPath = path.join(process.cwd(), RAW_INPUT_FILE);
 
   // 1. Safety Check: Verify if your raw data file is present in the folder
@@ -19,7 +20,7 @@ function cleanRawDataPipeline() {
   }
 
   console.log(`📥 Reading raw data dump from: "${RAW_INPUT_FILE}"...`);
-  
+
   const workbook = XLSX.readFile(rawPath);
   const firstSheetName = workbook.SheetNames[0];
   const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName]);
@@ -88,7 +89,7 @@ function cleanRawDataPipeline() {
   XLSX.writeFile(newWorkbook, CLEAN_OUTPUT_FILE);
 
   console.log(`\n✅ DATA CLEANING MATRIX COMPILED SUCCESSFULLY!`);
-  console.log(`💾 Saved your beautiful, structured pipeline file as: "${CLEAN_OUTPUT_FILE}" (${cleanedMatrix.length} Verified Clean Leads)\n`);
+  console.log(`💾 Saved your beautiful, structured Excel file as: "${CLEAN_OUTPUT_FILE}" (${cleanedMatrix.length} Verified Clean Leads)\n`);
 }
 
 cleanRawDataPipeline();
