@@ -30,15 +30,14 @@ type RecentJob = {
 const STORAGE_KEY = 'tasktuck-recent-briefs';
 const MAX_RECENT_JOBS = 8;
 
-function TaskTuckMark({ compact = false }: { compact?: boolean }) {
-  return (
-    <div className={`${compact ? 'h-9 w-9' : 'h-10 w-10'} flex items-center justify-center rounded-xl bg-slate-950 text-white shadow-sm`}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" className={compact ? 'h-5 w-5' : 'h-[22px] w-[22px]'}>
-        <path d="M6 7.5h12M8.5 4.5h7M8 9v7.25A3.75 3.75 0 0 0 11.75 20h.5A3.75 3.75 0 0 0 16 16.25V9" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-        <path d="M8 11.5h8" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-      </svg>
-    </div>
-  );
+function getJobLabel(inquiry: string) {
+  const firstLine = inquiry.split('\n').map((line) => line.trim()).find(Boolean);
+  if (!firstLine) return 'Untitled inquiry';
+  return firstLine.length > 46 ? `${firstLine.slice(0, 46)}…` : firstLine;
+}
+
+function formatTime(timestamp: number) {
+  return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 function Icon({ name }: { name: 'inbox' | 'quote' | 'jobs' | 'customers' | 'settings' | 'plus' | 'copy' | 'download' | 'spark' | 'arrow' | 'check' }) {
@@ -60,6 +59,17 @@ function Icon({ name }: { name: 'inbox' | 'quote' | 'jobs' | 'customers' | 'sett
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
       {paths[name]}
     </svg>
+  );
+}
+
+function TaskTuckMark() {
+  return (
+    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white shadow-sm">
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-[22px] w-[22px]">
+        <path d="M6 7.5h12M8.5 4.5h7M8 9v7.25A3.75 3.75 0 0 0 11.75 20h.5A3.75 3.75 0 0 0 16 16.25V9" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+        <path d="M8 11.5h8" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+      </svg>
+    </div>
   );
 }
 
@@ -118,7 +128,6 @@ export default function Home() {
         if (form && inquiry.trim() && !loading) form.requestSubmit();
       }
     };
-
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
   }, [inquiry, loading]);
@@ -129,13 +138,11 @@ export default function Home() {
     return { label: 'Ready for intake', dot: 'bg-teal-500' };
   }, [loading, result]);
 
-  const canSubmit = inquiry.trim().length > 0 && !loading;
-  const characterCount = inquiry.length;
+  const canSubmit = inquiry.trim().length > 0 && inquiry.length <= 20000 && !loading;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!canSubmit) return;
-
     setLoading(true);
     setResult('');
     setError('');
@@ -241,8 +248,7 @@ export default function Home() {
 
           <div className="px-3 pt-5">
             <button type="button" onClick={resetWorkspace} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800">
-              <Icon name="plus" />
-              New inquiry
+              <Icon name="plus" /> New inquiry
             </button>
           </div>
 
@@ -334,12 +340,12 @@ export default function Home() {
                         className="min-h-[300px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50/80 p-4 pb-10 text-sm leading-7 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-teal-300 focus:bg-white focus:ring-4 focus:ring-teal-500/10"
                         placeholder="Paste the customer message here…"
                         value={inquiry}
-                        onChange={(event) => setInquiry(event.target.value)}
+                        onChange={(event) => { setInquiry(event.target.value); if (error) setError(''); }}
                         disabled={loading}
                       />
                       <div className="pointer-events-none absolute bottom-3 left-4 right-4 flex items-center justify-between text-[10px] text-slate-400">
                         <span>Ctrl/⌘ + Enter to analyze</span>
-                        <span>{characterCount.toLocaleString()} / 20,000</span>
+                        <span className={inquiry.length > 20000 ? 'font-semibold text-rose-600' : ''}>{inquiry.length.toLocaleString()} / 20,000</span>
                       </div>
                     </div>
                     <div className="mt-3 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -366,7 +372,7 @@ export default function Home() {
                       {recentJobs.map((job) => (
                         <button key={job.id} type="button" onClick={() => openRecentJob(job)} className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${activeJobId === job.id ? 'border-teal-200 bg-teal-50' : 'border-transparent bg-slate-50 hover:border-slate-200 hover:bg-white'}`}>
                           <div className="truncate text-xs font-semibold text-slate-800">{job.label}</div>
-                          <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400"><span>{new Date(job.createdAt).toLocaleDateString()}</span><span>{new Date(job.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
+                          <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400"><span>{new Date(job.createdAt).toLocaleDateString()}</span><span>{formatTime(job.createdAt)}</span></div>
                         </button>
                       ))}
                     </div>
@@ -385,19 +391,15 @@ export default function Home() {
               </aside>
             </div>
 
-            {error && (
-              <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800"><span className="font-semibold">Couldn’t process that.</span> <span className="break-all text-rose-700/80">{error}</span></div>
-            )}
+            {error && <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800"><span className="font-semibold">Couldn’t process that.</span> <span className="break-all text-rose-700/80">{error}</span></div>}
 
-            <section className={`mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition ${result ? 'opacity-100' : 'opacity-95'}`}>
+            <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${result ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}><Icon name={result ? 'check' : 'spark'} /></div>
                   <div>
                     <div className="text-sm font-semibold text-slate-950">Operations brief</div>
-                    <div className="mt-0.5 text-[11px] text-slate-500">
-                      {status.label}{lastRunAt ? ` · ${lastRunAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}{lastModel ? ` · ${lastModel}` : ''}
-                    </div>
+                    <div className="mt-0.5 text-[11px] text-slate-500">{status.label}{lastRunAt ? ` · ${formatTime(lastRunAt.getTime())}` : ''}{lastModel ? ` · ${lastModel}` : ''}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -430,10 +432,4 @@ export default function Home() {
       </div>
     </main>
   );
-}
-
-function getJobLabel(inquiry: string) {
-  const firstLine = inquiry.split('\n').map((line) => line.trim()).find(Boolean);
-  if (!firstLine) return 'Untitled inquiry';
-  return firstLine.length > 46 ? `${firstLine.slice(0, 46)}…` : firstLine;
 }
