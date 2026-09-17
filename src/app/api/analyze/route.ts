@@ -8,6 +8,8 @@ Your job is to turn messy customer inquiries into a concise, quote-ready operati
 
 Extract only information supported by the customer message. Do not invent prices, square footage, room counts, dates, access details, or services. Mark unknown items as "Not provided".
 
+Important date rule: distinguish the cleaning appointment from any other date in the message. Under "Requested date/time", include only the date/time the customer wants the cleaning performed. Under "Requested date", include a different related date such as a move-out date, event date, lease date, or deadline when one is explicitly mentioned. If a date could be either, preserve the ambiguity instead of guessing.
+
 Return markdown with these sections in this order:
 ## Customer
 - Name / contact details if provided
@@ -19,13 +21,15 @@ Return markdown with these sections in this order:
 - Requested cleaning services and any special tasks
 
 ## Timing & access
-- Requested date/time, frequency, entry instructions, parking, keys, concierge, or other logistics
+- Requested date/time for the cleaning
+- Requested date for a related deadline or other non-cleaning date, when relevant
+- Frequency, entry instructions, parking, keys, concierge, loading, or other logistics
 
 ## Constraints & signals
 - Pets, urgency, condition, special requests, questions, or anything that could affect quoting
 
 ## Follow-up checklist
-- The specific missing details the operator should confirm before quoting or scheduling
+- The specific missing or ambiguous details the operator should confirm before quoting or scheduling
 
 Keep the brief practical and easy to scan. Do not provide a final price unless the customer explicitly supplied one.`;
 
@@ -66,7 +70,7 @@ export async function POST(request: Request) {
     if (!response.ok) {
       let detail = rawText;
       try {
-        const parsed = JSON.parse(rawText);
+        const parsed: { error?: string } = JSON.parse(rawText);
         detail = parsed.error || rawText;
       } catch {
         // Keep the original response text when Ollama does not return JSON.
@@ -78,7 +82,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      const data = JSON.parse(rawText);
+      const data: { message?: { content?: string } } = JSON.parse(rawText);
       const result = typeof data.message?.content === 'string' ? data.message.content.trim() : '';
 
       if (!result) {
