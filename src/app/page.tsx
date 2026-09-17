@@ -8,6 +8,9 @@ export default function Home() {
   const [result, setResult] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showWaitlist, setShowWaitlist] = useState(false);
+  const [waitlistEmail, setWaitlistEmail] = useState('');
+  const [waitlistSuccess, setWaitlistSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,8 +43,14 @@ export default function Home() {
     }
   };
 
+  const handleWaitlistSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!waitlistEmail.trim()) return;
+    setWaitlistSuccess(true);
+  };
+
   return (
-    <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12 flex flex-col items-center selection:bg-blue-500/30">
+    <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12 flex flex-col items-center selection:bg-blue-500/30 relative overflow-hidden">
       {/* Decorative top ambient glow */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-64 bg-gradient-to-b from-blue-500/10 via-transparent to-transparent blur-3xl pointer-events-none" />
 
@@ -58,21 +67,82 @@ export default function Home() {
               QuoteFlow <span className="text-blue-500 font-medium">Ops</span>
             </h1>
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700/50">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Llama 3.2 Engaged
+          
+          <div className="flex items-center gap-3">
+            {/* The Monetization Validation Tracker Trigger Button */}
+            <button 
+              onClick={() => setShowWaitlist(true)}
+              className="text-xs font-bold bg-gradient-to-r from-amber-500 via-orange-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white px-4 py-2 rounded-xl shadow-lg shadow-orange-600/10 transition-all border border-amber-400/20 active:scale-95"
+            >
+              👑 Upgrade to Auto-Pilot ($29/mo)
+            </button>
+
+            <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700/50 hidden sm:flex">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Llama 3.2 Engaged
+            </div>
           </div>
         </div>
+
+        {/* Dynamic Demand Capture Modal Box */}
+        {showWaitlist && (
+          <div className="bg-gradient-to-r from-slate-950 to-slate-900 border border-amber-500/30 rounded-xl p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col gap-3">
+            <div className="flex justify-between items-center border-b border-slate-800/60 pb-2">
+              <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                ⚡ QuoteFlow Pro Auto-Pilot
+              </h3>
+              <button 
+                onClick={() => { setShowWaitlist(false); setWaitlistSuccess(false); setWaitlistEmail(''); }} 
+                className="text-slate-500 hover:text-white transition-colors text-xs p-1"
+              >
+                ✕ Close Window
+              </button>
+            </div>
+            
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Stop copy-pasting customer inquiries manually. The Auto-Pilot integration tier securely connects directly to your active business Gmail or Outlook inbox routing parameters, reading inbound requests and generating structured Operations Briefs inside your CRM automatically.
+            </p>
+
+            {!waitlistSuccess ? (
+              <form onSubmit={handleWaitlistSubmit} className="flex flex-col sm:flex-row gap-2 mt-1">
+                <input 
+                  type="email" 
+                  required
+                  placeholder="Enter your operational business email..." 
+                  className="bg-slate-950/80 border border-slate-800 rounded-lg px-3 py-2 text-xs flex-1 outline-none focus:border-amber-500/50 text-slate-200 placeholder:text-slate-600 transition-colors shadow-inner"
+                  value={waitlistEmail}
+                  onChange={(e) => setWaitlistEmail(e.target.value)}
+                />
+                <button 
+                  type="submit" 
+                  className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold px-4 py-2 rounded-lg text-xs transition-all shadow-md active:scale-98"
+                >
+                  Lock Early Access Pricing
+                </button>
+              </form>
+            ) : (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs font-medium animate-in fade-in duration-200">
+                ✓ Access Locked! Early-bird pricing parameters registered. We will contact you at <span className="underline font-bold text-white">{waitlistEmail}</span> as soon as your secure inbox sync module finishes staging.
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Action Panel Grid Layout */}
         <div className="grid grid-cols-1 gap-6">
           {/* Input Form Panel */}
           <div className="bg-slate-800/40 backdrop-blur-md rounded-xl p-6 border border-slate-800 shadow-xl flex flex-col gap-4">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-200 mb-1">Inbound Lead Source</h2>
-              <p className="text-xs text-slate-400">
-                Paste any unstructured customer email, voicemail transcript, or desk notes below.
-              </p>
+            <div className="flex justify-between items-start">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-200 mb-1">Inbound Lead Source</h2>
+                <p className="text-xs text-slate-400">
+                  Paste any unstructured customer email, voicemail transcript, or desk notes below.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-[10px] text-slate-400 bg-slate-800/50 px-2 py-1 rounded border border-slate-700/50 sm:hidden">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Llama 3.2
+              </div>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -86,7 +156,7 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-3 px-4 rounded-xl text-sm transition-all shadow-lg shadow-blue-600/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-3 px-4 rounded-xl text-sm transition-all shadow-lg shadow-blue-600/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 select-none"
               >
                 {loading ? (
                   <>
@@ -123,16 +193,16 @@ export default function Home() {
                   onClick={() => navigator.clipboard.writeText(result)}
                   className="text-[11px] text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 border border-slate-700 transition-colors"
                 >
-                  Copy Raw Output
+                  Copy Raw Output Brief
                 </button>
               </div>
               <div className="p-6 prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed font-sans shadow-inner">
                 <ReactMarkdown 
                   components={{
-                    h2: ({node, ...props}) => <h2 className="text-base font-bold text-white mt-4 mb-2 border-b border-slate-800 pb-1 first:mt-0" {...props} />,
-                    strong: ({node, ...props}) => <strong className="text-blue-400 font-semibold" {...props} />,
-                    ul: ({node, ...props}) => <ul className="list-disc pl-5 space-y-1.5 my-3 text-slate-300" {...props} />,
-                    li: ({node, ...props}) => <li className="marker:text-slate-500" {...props} />,
+                    h2: ({ ...props }: ComponentProps) => <h2 className="text-base font-bold text-white mt-4 mb-2 border-b border-slate-800 pb-1 first:mt-0" {...props} />,
+                    strong: ({ ...props }: ComponentProps) => <strong className="text-blue-400 font-semibold" {...props} />,
+                    ul: ({ ...props }: ComponentProps) => <ul className="list-disc pl-5 space-y-1.5 my-3 text-slate-300" {...props} />,
+                    li: ({ ...props }: ComponentProps) => <li className="marker:text-slate-500" {...props} />,
                   }}
                 >
                   {result}
