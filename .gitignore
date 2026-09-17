@@ -13,12 +13,13 @@
 # testing
 /coverage
 
-# next.js
+# Next.js / vinext / Cloudflare build output
 /.next/
 /out/
-
-# production
 /build
+/dist/
+/.vinext/
+/.wrangler/
 
 # misc
 .DS_Store
@@ -32,9 +33,6 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-
-# vercel
-.vercel
 
 # typescript
 *.tsbuildinfo
