@@ -130,6 +130,8 @@ export default function Home() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [hydrated, setHydrated] = useState(false);
 
+  // Browser-local storage must hydrate after mount so server and client markup stay consistent.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
       const read = <T,>(key: string, fallback: T): T => {
@@ -144,6 +146,7 @@ export default function Home() {
       setBriefs([]); setQuotes([]); setJobs([]); setSettings(DEFAULT_SETTINGS);
     } finally { setHydrated(true); }
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => { if (hydrated) try { window.localStorage.setItem(STORAGE.briefs, JSON.stringify(briefs)); } catch { /* keep workspace usable */ } }, [briefs, hydrated]);
   useEffect(() => { if (hydrated) try { window.localStorage.setItem(STORAGE.quotes, JSON.stringify(quotes)); } catch { /* keep workspace usable */ } }, [quotes, hydrated]);
@@ -266,8 +269,7 @@ export default function Home() {
     if (!selectedQuote || selectedQuote.status !== 'Ready to send') return;
     const existing = jobs.find((job) => job.quoteId === selectedQuote.id);
     if (existing) { setView('jobs'); setSelectedQuoteId(''); return; }
-    const now = Date.now();
-    const job: JobRecord = { id: `${now}-${Math.random().toString(36).slice(2, 8)}`, quoteId: selectedQuote.id, quoteNumber: selectedQuote.number, createdAt: now, updatedAt: now, customerName: selectedQuote.customerName, propertySummary: selectedQuote.propertySummary, serviceSummary: selectedQuote.serviceItems.map(cleanItem).slice(0, 3).join(' · '), cleaningDate: selectedQuote.cleaningDate, status: 'Ready to schedule' };
+    const job: JobRecord = { id: `job-${selectedQuote.id}`, quoteId: selectedQuote.id, quoteNumber: selectedQuote.number, createdAt: selectedQuote.updatedAt, updatedAt: selectedQuote.updatedAt, customerName: selectedQuote.customerName, propertySummary: selectedQuote.propertySummary, serviceSummary: selectedQuote.serviceItems.map(cleanItem).slice(0, 3).join(' · '), cleaningDate: selectedQuote.cleaningDate, status: 'Ready to schedule' };
     setJobs((current) => [job, ...current]); setView('jobs'); setSelectedQuoteId('');
   };
   const updateJobStatus = (jobId: string, status: JobStatus) => setJobs((current) => current.map((job) => job.id === jobId ? { ...job, status, updatedAt: Date.now() } : job));
