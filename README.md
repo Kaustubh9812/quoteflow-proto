@@ -10,48 +10,66 @@ Install dependencies:
 npm install
 ```
 
-Run the original Next.js development server:
+Run TaskTuck with the Cloudflare-compatible vinext runtime:
 
 ```bash
 npm run dev
 ```
 
-Run the Cloudflare-compatible vinext development server:
+The original Next.js development server remains available for compatibility checks:
 
 ```bash
-npm run dev:vinext
+npm run dev:next
 ```
 
-## Production build
+## Checks and builds
 
-Standard Next.js build:
+Lint:
+
+```bash
+npm run lint
+```
+
+Cloudflare production build:
 
 ```bash
 npm run build
 ```
 
-Cloudflare Workers build:
+Original Next.js production build, for comparison/testing:
 
 ```bash
-npm run build:vinext
+npm run build:next
 ```
 
 ## Cloudflare deployment
 
-The production deployment target is Cloudflare Workers. The repository contains the Worker configuration in `wrangler.jsonc` and the Cloudflare/Vite integration in `vite.config.ts`.
+The production platform is Cloudflare Workers.
 
-Deploy with:
+The repository contains the Worker configuration in `wrangler.jsonc` and the Cloudflare/Vite integration in `vite.config.ts`.
+
+For local authenticated deployment:
 
 ```bash
-npm run deploy:vinext
+npm run deploy:full
 ```
 
-The production branch for Cloudflare Builds is `redesign-v2`.
+For Cloudflare Workers Builds, use:
+
+- Build command: `npm run build`
+- Deploy command: `npm run deploy`
+- Production branch: `redesign-v2`
+
+The CI deploy script uses `--skip-build` because Workers Builds already runs the build command before the deploy command.
 
 ## AI
 
-The intake analyzer currently supports local Ollama development through `/api/analyze`. The production AI provider will be configured separately so local development can continue to use Ollama without exposing local services to the public application.
+The intake analyzer currently supports local Ollama development through `/api/analyze`. Production AI is intentionally separated from the local Ollama dependency; the production adapter will be configured before public AI use.
 
 ## Data
 
-The current operator workspace uses browser-local persistence for briefs, quotes, jobs, customers, and settings. The production data layer will be migrated to a persistent cloud database before multi-user SaaS launch.
+The current operator workspace uses browser-local persistence for briefs, quotes, jobs, customers, and settings. A persistent cloud data layer and authentication are required before multi-user SaaS launch.
+
+## Deployment notes
+
+The old Vercel deployment is not part of the production deployment path. Vercel-related starter assets/configuration are not required by TaskTuck; Cloudflare Workers is the production target.
