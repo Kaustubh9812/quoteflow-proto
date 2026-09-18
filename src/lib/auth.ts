@@ -1,16 +1,13 @@
 import { betterAuth } from 'better-auth';
 import { env } from 'cloudflare:workers';
 
-export function createAuth() {
-  const runtimeEnv = env as unknown as Record<string, string | undefined>;
-  const authSecret = runtimeEnv[['BETTER', 'AUTH', 'SECRET'].join('_')];
+const runtimeEnv = env as unknown as Record<string, string | undefined>;
 
-  return betterAuth({
-    database: env.task_tuck_db,
-    secret: authSecret,
-    baseURL: env.BETTER_AUTH_URL || undefined,
-    emailAndPassword: {
-      enabled: true,
-    },
-  });
-}
+export const auth = betterAuth({
+  database: env.task_tuck_db,
+  secret: runtimeEnv[['BETTER', 'AUTH', 'SECRET'].join('_')],
+  baseURL: runtimeEnv.BETTER_AUTH_URL || undefined,
+  emailAndPassword: {
+    enabled: true,
+  },
+});
