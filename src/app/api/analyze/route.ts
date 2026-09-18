@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 
 const DEFAULT_PROVIDER = 'ollama';
@@ -135,6 +136,11 @@ async function analyzeWithOllama(inquiry: string) {
 
 export async function POST(request: Request) {
   try {
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const inquiry = typeof body?.inquiry === 'string' ? body.inquiry.trim() : '';
 
