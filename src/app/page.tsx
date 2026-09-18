@@ -164,21 +164,29 @@ export default function Home() {
     return () => { active = false; };
   }, []);
 
+  const saveWorkspaceNow = async () => {
+    if (!workspaceReady) return false;
+    try {
+      const response = await fetch('/api/workspace', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ briefs, quotes, jobs, settings }),
+        keepalive: true,
+      });
+      if (!response.ok) throw new Error('Workspace save failed.');
+      return true;
+    } catch {
+      setError('Your workspace could not be saved. Please retry.');
+      return false;
+    }
+  };
+
   useEffect(() => {
     if (!hydrated || !workspaceReady) return;
-    const timer = window.setTimeout(async () => {
-      try {
-        await fetch('/api/workspace', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ briefs, quotes, jobs, settings }),
-        });
-      } catch {
-        setError('Your workspace could not be saved. Please retry.');
-      }
-    }, 350);
+    const timer = window.setTimeout(() => { void saveWorkspaceNow(); }, 350);
     return () => window.clearTimeout(timer);
   }, [briefs, quotes, jobs, settings, hydrated, workspaceReady]);
+
 
 
   useEffect(() => {
@@ -322,7 +330,7 @@ export default function Home() {
         </aside>
 
         <div className="min-w-0 flex-1">
-          <header className="flex h-[72px] items-center justify-between border-b border-slate-200 bg-white/95 px-5 backdrop-blur sm:px-8"><div><div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Workspace</div><h1 className="mt-0.5 text-lg font-semibold tracking-tight text-slate-950">{pageTitle[view]}</h1></div><div className="flex items-center gap-3"><div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600 sm:flex"><span className={`h-1.5 w-1.5 rounded-full ${loading ? 'bg-amber-500' : 'bg-emerald-500'}`} />{lastModel ? `Local AI · ${lastModel}` : 'Local AI configured'}</div><button type="button" onClick={newInquiry} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"><Icon name="plus" /> New inquiry</button><button type="button" onClick={() => authClient.signOut()} className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-800">Sign out</button></div></header>
+          <header className="flex h-[72px] items-center justify-between border-b border-slate-200 bg-white/95 px-5 backdrop-blur sm:px-8"><div><div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Workspace</div><h1 className="mt-0.5 text-lg font-semibold tracking-tight text-slate-950">{pageTitle[view]}</h1></div><div className="flex items-center gap-3"><div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600 sm:flex"><span className={`h-1.5 w-1.5 rounded-full ${loading ? 'bg-amber-500' : 'bg-emerald-500'}`} />{lastModel ? `Local AI · ${lastModel}` : 'Local AI configured'}</div><button type="button" onClick={newInquiry} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"><Icon name="plus" /> New inquiry</button><button type="button" onClick={async () => { await saveWorkspaceNow(); await authClient.signOut(); }} className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-800">Sign out</button></div></header>
           <div className="border-b border-slate-200 bg-white px-4 py-2 lg:hidden"><div className="flex gap-1 overflow-x-auto">{navItems.map((item) => <button key={item.view} type="button" onClick={() => navigate(item.view)} className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-semibold ${view === item.view ? 'bg-teal-50 text-teal-800' : 'text-slate-500'}`}><Icon name={item.icon} />{item.label}</button>)}</div></div>
 
           <main className="mx-auto max-w-[1480px] px-5 py-6 sm:px-8">
