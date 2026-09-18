@@ -11,6 +11,7 @@
     "preview": "wrangler dev --config dist/server/wrangler.json",
     "deploy": "vinext-cloudflare deploy --config dist/server/wrangler.json --skip-build",
     "deploy:full": "vinext-cloudflare deploy --config dist/server/wrangler.json",
+    "deploy:preview": "vinext-cloudflare deploy --config dist/server/wrangler.json --skip-build --preview",
     "lint": "eslint"
   },
   "dependencies": {
