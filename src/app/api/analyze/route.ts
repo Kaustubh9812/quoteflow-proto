@@ -1,6 +1,9 @@
+import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 
-const DEFAULT_MODEL = 'llama3.2';
+const DEFAULT_PROVIDER = 'ollama';
+const DEFAULT_OPENAI_MODEL = 'gpt-5.6-luna';
+const DEFAULT_OLLAMA_MODEL = 'llama3.2';
 const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
 
 const SYSTEM_PROMPT = `You are TaskTuck, a cleaning-operations intake assistant.
@@ -33,6 +36,91 @@ Return markdown with these sections in this order:
 
 Keep the brief practical and easy to scan. Do not provide a final price unless the customer explicitly supplied one.`;
 
+function getProvider() {
+  return (process.env.TASKTUCK_AI_PROVIDER || (process.env.OPENAI_API_KEY ? 'openai' : DEFAULT_PROVIDER)).trim().toLowerCase();
+}
+
+async function analyzeWithOpenAI(inquiry: string) {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: 'Production AI is not configured yet. Add the OPENAI_API_KEY secret to the Worker.' },
+      { status: 503 },
+    );
+  }
+
+  const model = process.env.OPENAI_MODEL?.trim() || DEFAULT_OPENAI_MODEL;
+  const client = new OpenAI({ apiKey });
+
+  const response = await client.responses.create({
+    model,
+    instructions: SYSTEM_PROMPT,
+    input: inquiry,
+    max_output_tokens: 1200,
+  });
+
+  const result = response.output_text.trim();
+
+  if (!result) {
+    return NextResponse.json({ error: 'The OpenAI model returned an empty brief.' }, { status: 502 });
+  }
+
+  return NextResponse.json({ result, model });
+}
+
+async function analyzeWithOllama(inquiry: string) {
+  const ollamaUrl = (process.env.OLLAMA_URL || DEFAULT_OLLAMA_URL).replace(/\/$/, '');
+  const model = process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL;
+
+  const response = await fetch(`${ollamaUrl}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: inquiry },
+      ],
+      stream: false,
+      options: {
+        temperature: 0.2,
+      },
+    }),
+  });
+
+  const rawText = await response.text();
+
+  if (!response.ok) {
+    let detail = rawText;
+    try {
+      const parsed: { error?: string } = JSON.parse(rawText);
+      detail = parsed.error || rawText;
+    } catch {
+      // Keep the original response text when Ollama does not return JSON.
+    }
+    return NextResponse.json(
+      { error: `Local AI request failed (${response.status}): ${detail}` },
+      { status: 502 },
+    );
+  }
+
+  try {
+    const data: { message?: { content?: string } } = JSON.parse(rawText);
+    const result = typeof data.message?.content === 'string' ? data.message.content.trim() : '';
+
+    if (!result) {
+      return NextResponse.json({ error: 'The local AI model returned an empty brief.' }, { status: 502 });
+    }
+
+    return NextResponse.json({ result, model });
+  } catch {
+    return NextResponse.json(
+      { error: 'The local AI server returned an unreadable response.' },
+      { status: 502 },
+    );
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -46,61 +134,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'That inquiry is too long. Keep it under 20,000 characters.' }, { status: 413 });
     }
 
-    const ollamaUrl = (process.env.OLLAMA_URL || DEFAULT_OLLAMA_URL).replace(/\/$/, '');
-    const model = process.env.OLLAMA_MODEL || DEFAULT_MODEL;
+    const provider = getProvider();
 
-    const response = await fetch(`${ollamaUrl}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: inquiry },
-        ],
-        stream: false,
-        options: {
-          temperature: 0.2,
-        },
-      }),
-    });
-
-    const rawText = await response.text();
-
-    if (!response.ok) {
-      let detail = rawText;
-      try {
-        const parsed: { error?: string } = JSON.parse(rawText);
-        detail = parsed.error || rawText;
-      } catch {
-        // Keep the original response text when Ollama does not return JSON.
-      }
-      return NextResponse.json(
-        { error: `Local AI request failed (${response.status}): ${detail}` },
-        { status: 502 },
-      );
+    if (provider === 'openai') {
+      return await analyzeWithOpenAI(inquiry);
     }
 
-    try {
-      const data: { message?: { content?: string } } = JSON.parse(rawText);
-      const result = typeof data.message?.content === 'string' ? data.message.content.trim() : '';
-
-      if (!result) {
-        return NextResponse.json({ error: 'The local AI model returned an empty brief.' }, { status: 502 });
-      }
-
-      return NextResponse.json({ result, model });
-    } catch {
-      return NextResponse.json(
-        { error: 'The local AI server returned an unreadable response.' },
-        { status: 502 },
-      );
+    if (provider === 'ollama') {
+      return await analyzeWithOllama(inquiry);
     }
+
+    return NextResponse.json(
+      { error: `Unsupported TaskTuck AI provider: ${provider}` },
+      { status: 500 },
+    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown server error';
     return NextResponse.json(
-      { error: `Could not reach the local AI service. Make sure Ollama is running. (${message})` },
-      { status: 503 },
+      { error: `AI analysis failed: ${message}` },
+      { status: 502 },
     );
   }
 }
