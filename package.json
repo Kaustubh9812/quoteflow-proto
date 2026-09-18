@@ -40,5 +40,6 @@
     "typescript": "^5",
     "vite": "8.3.0",
     "wrangler": "4.133.0"
-  }
+  },
+  "type": "module"
 }
