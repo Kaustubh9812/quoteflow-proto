@@ -34,7 +34,6 @@ type QuoteRecord = {
 type JobRecord = { id: string; quoteId: string; quoteNumber: string; createdAt: number; updatedAt: number; customerName: string; propertySummary: string; serviceSummary: string; cleaningDate: string; status: JobStatus };
 type Settings = { businessName: string; email: string; phone: string; currency: string; terms: string; defaultNote: string };
 
-const STORAGE = { briefs: 'tasktuck-brief-records', quotes: 'tasktuck-quotes', jobs: 'tasktuck-jobs', settings: 'tasktuck-settings' };
 const DEFAULT_SETTINGS: Settings = {
   businessName: 'TaskTuck',
   email: '',
@@ -130,28 +129,56 @@ export default function Home() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [hydrated, setHydrated] = useState(false);
 
-  // Browser-local storage must hydrate after mount so server and client markup stay consistent.
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+
+  // Authenticated workspace data lives in D1 so the same account works across browsers and devices.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    try {
-      const read = <T,>(key: string, fallback: T): T => {
-        const raw = window.localStorage.getItem(key);
-        return raw ? JSON.parse(raw) as T : fallback;
-      };
-      setBriefs(read<BriefRecord[]>(STORAGE.briefs, []));
-      setQuotes(read<QuoteRecord[]>(STORAGE.quotes, []));
-      setJobs(read<JobRecord[]>(STORAGE.jobs, []));
-      setSettings({ ...DEFAULT_SETTINGS, ...read<Partial<Settings>>(STORAGE.settings, {}) });
-    } catch {
-      setBriefs([]); setQuotes([]); setJobs([]); setSettings(DEFAULT_SETTINGS);
-    } finally { setHydrated(true); }
+    let active = true;
+    (async () => {
+      try {
+        const response = await fetch('/api/workspace', { cache: 'no-store' });
+        const data: {
+          data?: {
+            briefs?: BriefRecord[];
+            quotes?: QuoteRecord[];
+            jobs?: JobRecord[];
+            settings?: Partial<Settings>;
+          };
+          error?: string;
+        } = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not load your workspace.');
+        if (!active) return;
+        setBriefs(Array.isArray(data.data?.briefs) ? data.data.briefs : []);
+        setQuotes(Array.isArray(data.data?.quotes) ? data.data.quotes : []);
+        setJobs(Array.isArray(data.data?.jobs) ? data.data.jobs : []);
+        setSettings({ ...DEFAULT_SETTINGS, ...(data.data?.settings || {}) });
+        setWorkspaceReady(true);
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : 'Could not load your workspace.');
+      } finally {
+        if (active) setHydrated(true);
+      }
+    })();
+    return () => { active = false; };
   }, []);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
-  useEffect(() => { if (hydrated) try { window.localStorage.setItem(STORAGE.briefs, JSON.stringify(briefs)); } catch { /* keep workspace usable */ } }, [briefs, hydrated]);
-  useEffect(() => { if (hydrated) try { window.localStorage.setItem(STORAGE.quotes, JSON.stringify(quotes)); } catch { /* keep workspace usable */ } }, [quotes, hydrated]);
-  useEffect(() => { if (hydrated) try { window.localStorage.setItem(STORAGE.jobs, JSON.stringify(jobs)); } catch { /* keep workspace usable */ } }, [jobs, hydrated]);
-  useEffect(() => { if (hydrated) try { window.localStorage.setItem(STORAGE.settings, JSON.stringify(settings)); } catch { /* keep workspace usable */ } }, [settings, hydrated]);
+  useEffect(() => {
+    if (!hydrated || !workspaceReady) return;
+    const timer = window.setTimeout(async () => {
+      try {
+        await fetch('/api/workspace', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ briefs, quotes, jobs, settings }),
+        });
+      } catch {
+        setError('Your workspace could not be saved. Please retry.');
+      }
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [briefs, quotes, jobs, settings, hydrated, workspaceReady]);
+
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
