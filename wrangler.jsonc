@@ -5,6 +5,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "vinext/server/fetch-handler",
   "preview_urls": true,
+  "ai": {
+    "binding": "AI"
+  },
   "observability": {
     "enabled": true
   }
