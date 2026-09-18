@@ -1,8 +1,8 @@
-import OpenAI from 'openai';
+import { env } from 'cloudflare:workers';
 import { NextResponse } from 'next/server';
 
 const DEFAULT_PROVIDER = 'ollama';
-const DEFAULT_OPENAI_MODEL = 'gpt-5.6-luna';
+const DEFAULT_WORKERS_AI_MODEL = '@cf/google/gemma-4-26b-a4b-it';
 const DEFAULT_OLLAMA_MODEL = 'llama3.2';
 const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
 
@@ -37,32 +37,37 @@ Return markdown with these sections in this order:
 Keep the brief practical and easy to scan. Do not provide a final price unless the customer explicitly supplied one.`;
 
 function getProvider() {
-  return (process.env.TASKTUCK_AI_PROVIDER || (process.env.OPENAI_API_KEY ? 'openai' : DEFAULT_PROVIDER)).trim().toLowerCase();
+  const configured = process.env.TASKTUCK_AI_PROVIDER?.trim().toLowerCase();
+  if (configured) return configured;
+
+  // Local builds/dev use Ollama when OLLAMA_URL is present.
+  // Cloudflare production has no OLLAMA_URL, so it naturally uses Workers AI.
+  return process.env.OLLAMA_URL ? DEFAULT_PROVIDER : 'workers-ai';
 }
 
-async function analyzeWithOpenAI(inquiry: string) {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: 'Production AI is not configured yet. Add the OPENAI_API_KEY secret to the Worker.' },
-      { status: 503 },
-    );
-  }
+async function analyzeWithWorkersAI(inquiry: string) {
+  const model = process.env.WORKERS_AI_MODEL?.trim() || DEFAULT_WORKERS_AI_MODEL;
 
-  const model = process.env.OPENAI_MODEL?.trim() || DEFAULT_OPENAI_MODEL;
-  const client = new OpenAI({ apiKey });
-
-  const response = await client.responses.create({
-    model,
-    instructions: SYSTEM_PROMPT,
-    input: inquiry,
-    max_output_tokens: 1200,
+  const response = await env.AI.run(model, {
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: inquiry },
+    ],
+    temperature: 0.2,
+    chat_template_kwargs: {
+      enable_thinking: false,
+    },
   });
 
-  const result = response.output_text.trim();
+  const result = typeof response === 'object' && response !== null && 'response' in response
+    ? String((response as { response?: unknown }).response || '').trim()
+    : '';
 
   if (!result) {
-    return NextResponse.json({ error: 'The OpenAI model returned an empty brief.' }, { status: 502 });
+    return NextResponse.json(
+      { error: 'The Workers AI model returned an empty brief.' },
+      { status: 502 },
+    );
   }
 
   return NextResponse.json({ result, model });
@@ -131,13 +136,16 @@ export async function POST(request: Request) {
     }
 
     if (inquiry.length > 20000) {
-      return NextResponse.json({ error: 'That inquiry is too long. Keep it under 20,000 characters.' }, { status: 413 });
+      return NextResponse.json(
+        { error: 'That inquiry is too long. Keep it under 20,000 characters.' },
+        { status: 413 },
+      );
     }
 
     const provider = getProvider();
 
-    if (provider === 'openai') {
-      return await analyzeWithOpenAI(inquiry);
+    if (provider === 'workers-ai') {
+      return await analyzeWithWorkersAI(inquiry);
     }
 
     if (provider === 'ollama') {
