@@ -1,14 +1,23 @@
 {
-  "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "task-tuck",
-  "compatibility_date": "2026-09-18",
-  "compatibility_flags": ["nodejs_compat"],
-  "main": "vinext/server/fetch-handler",
-  "preview_urls": true,
-  "ai": {
-    "binding": "AI"
-  },
-  "observability": {
-    "enabled": true
-  }
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "task-tuck",
+	"compatibility_date": "2026-09-18",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"main": "vinext/server/fetch-handler",
+	"preview_urls": true,
+	"ai": {
+		"binding": "AI"
+	},
+	"observability": {
+		"enabled": true
+	},
+	"d1_databases": [
+		{
+			"binding": "task_tuck_db",
+			"database_name": "task-tuck-db",
+			"database_id": "697a9ffb-f78a-4274-863e-e929959a5ceb"
+		}
+	]
 }
