@@ -3,13 +3,14 @@
   "version": "0.3.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "dev:vinext": "vinext dev",
-    "build": "next build",
-    "build:vinext": "vinext build",
-    "start": "next start",
-    "start:vinext": "wrangler dev --config dist/server/wrangler.json",
-    "deploy:vinext": "vinext-cloudflare deploy",
+    "dev": "vinext dev",
+    "dev:next": "next dev",
+    "build": "vinext build",
+    "build:next": "next build",
+    "start": "wrangler dev --config dist/server/wrangler.json",
+    "preview": "wrangler dev --config dist/server/wrangler.json",
+    "deploy": "vinext-cloudflare deploy --config dist/server/wrangler.json --skip-build",
+    "deploy:full": "vinext-cloudflare deploy --config dist/server/wrangler.json",
     "lint": "eslint"
   },
   "dependencies": {
