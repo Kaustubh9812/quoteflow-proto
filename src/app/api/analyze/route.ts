@@ -59,13 +59,20 @@ async function analyzeWithWorkersAI(inquiry: string) {
     },
   });
 
-  const result = typeof response === 'object' && response !== null && 'response' in response
-    ? String((response as { response?: unknown }).response || '').trim()
-    : '';
+  const result = (() => {
+    if (!response || typeof response !== 'object') return '';
+    const payload = response as {
+      response?: unknown;
+      choices?: Array<{ message?: { content?: unknown } }>;
+    };
+    if (typeof payload.response === 'string') return payload.response.trim();
+    const content = payload.choices?.[0]?.message?.content;
+    return typeof content === 'string' ? content.trim() : '';
+  })();
 
   if (!result) {
     return NextResponse.json(
-      { error: 'The Workers AI model returned an empty brief.' },
+      { error: 'The Workers AI model returned no usable text.' },
       { status: 502 },
     );
   }
