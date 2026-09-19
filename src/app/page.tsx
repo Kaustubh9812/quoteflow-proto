@@ -136,7 +136,7 @@ export default function Home() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [inboxMessages, setInboxMessages] = useState<InboxMessage[]>([]);
   const [inboxAddress, setInboxAddress] = useState('');
-  const [inboxFilter, setInboxFilter] = useState<'All' | 'Inquiries' | 'Questions' | 'Feedback' | 'Quote replies' | 'Needs review'>('All');
+  const [inboxFilter, setInboxFilter] = useState<'All' | 'Inquiries' | 'Questions' | 'Feedback' | 'Complaints' | 'Quote replies' | 'Needs review'>('All');
   const [selectedInboxId, setSelectedInboxId] = useState('');
   const [inboxLoading, setInboxLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -156,6 +156,7 @@ export default function Home() {
             quotes?: QuoteRecord[];
             jobs?: JobRecord[];
             settings?: Partial<Settings>;
+            inbox?: { messages?: InboxMessage[]; inboxAddress?: string };
           };
           error?: string;
         } = await response.json();
@@ -216,11 +217,11 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || (view !== 'overview' && view !== 'inbox')) return;
     void loadInbox();
     const timer = window.setInterval(() => { void loadInbox(); }, 20000);
     return () => window.clearInterval(timer);
-  }, [hydrated, loadInbox]);
+  }, [hydrated, view, loadInbox]);
 
 
 
@@ -280,7 +281,8 @@ export default function Home() {
     if (inboxFilter === 'Needs review') return message.needsHumanReview;
     if (inboxFilter === 'Inquiries') return message.category === 'inquiry';
     if (inboxFilter === 'Questions') return message.category === 'query';
-    if (inboxFilter === 'Feedback') return message.category === 'feedback' || message.category === 'complaint';
+    if (inboxFilter === 'Feedback') return message.category === 'feedback';
+    if (inboxFilter === 'Complaints') return message.category === 'complaint';
     if (inboxFilter === 'Quote replies') return message.category === 'quote_response';
     return true;
   }), [inboxMessages, inboxFilter]);
@@ -458,7 +460,7 @@ export default function Home() {
 
               <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2">
-                  {(['All', 'Inquiries', 'Questions', 'Feedback', 'Quote replies', 'Needs review'] as const).map((filter) => (
+                  {(['All', 'Inquiries', 'Questions', 'Feedback', 'Complaints', 'Quote replies', 'Needs review'] as const).map((filter) => (
                     <button key={filter} type="button" onClick={() => { setInboxFilter(filter); setSelectedInboxId(''); }} className={`rounded-lg px-3 py-2 text-[11px] font-semibold ${inboxFilter === filter ? 'bg-teal-50 text-teal-800' : 'text-slate-500 hover:bg-slate-50'}`}>{filter}{filter === 'Needs review' && inboxNeedsReview > 0 ? ` · ${inboxNeedsReview}` : ''}</button>
                   ))}
                   <button type="button" onClick={() => { void loadInbox(); }} className="ml-auto rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">{inboxLoading ? 'Refreshing…' : 'Refresh'}</button>
