@@ -2,8 +2,9 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { authClient } from '@/lib/auth-client';
+import type { InboxCategory, InboxMessage, InboxStatus } from '@/lib/inbox';
 
-type View = 'overview' | 'intake' | 'quotes' | 'jobs' | 'customers' | 'settings';
+type View = 'overview' | 'inbox' | 'intake' | 'quotes' | 'jobs' | 'customers' | 'settings';
 type QuoteStatus = 'Draft' | 'Ready to send';
 type JobStatus = 'Ready to schedule' | 'Scheduled' | 'Completed';
 
@@ -133,6 +134,11 @@ export default function Home() {
   const [quoteStatusFilter, setQuoteStatusFilter] = useState<'All' | QuoteStatus>('All');
   const [jobStatusFilter, setJobStatusFilter] = useState<'All' | JobStatus>('All');
   const [customerSearch, setCustomerSearch] = useState('');
+  const [inboxMessages, setInboxMessages] = useState<InboxMessage[]>([]);
+  const [inboxAddress, setInboxAddress] = useState('');
+  const [inboxFilter, setInboxFilter] = useState<'All' | 'Inquiries' | 'Questions' | 'Feedback' | 'Quote replies' | 'Needs review'>('All');
+  const [selectedInboxId, setSelectedInboxId] = useState('');
+  const [inboxLoading, setInboxLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   const [workspaceReady, setWorkspaceReady] = useState(false);
@@ -159,6 +165,8 @@ export default function Home() {
         setQuotes(Array.isArray(data.data?.quotes) ? data.data.quotes : []);
         setJobs(Array.isArray(data.data?.jobs) ? data.data.jobs : []);
         setSettings({ ...DEFAULT_SETTINGS, ...(data.data?.settings || {}) });
+        setInboxMessages(Array.isArray(data.data?.inbox?.messages) ? data.data.inbox.messages : []);
+        setInboxAddress(data.data?.inbox?.inboxAddress || '');
         setWorkspaceReady(true);
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : 'Could not load your workspace.');
@@ -191,6 +199,28 @@ export default function Home() {
     const timer = window.setTimeout(() => { void saveWorkspaceNow(); }, 350);
     return () => window.clearTimeout(timer);
   }, [briefs, quotes, jobs, settings, hydrated, workspaceReady]);
+
+  const loadInbox = async () => {
+    setInboxLoading(true);
+    try {
+      const response = await fetch('/api/inbox', { cache: 'no-store' });
+      const data: { data?: { messages?: InboxMessage[]; inboxAddress?: string }; error?: string } = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not load the inbox.');
+      setInboxMessages(Array.isArray(data.data?.messages) ? data.data.messages : []);
+      setInboxAddress(data.data?.inboxAddress || '');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not load the inbox.');
+    } finally {
+      setInboxLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!hydrated) return;
+    void loadInbox();
+    const timer = window.setInterval(() => { void loadInbox(); }, 20000);
+    return () => window.clearInterval(timer);
+  }, [hydrated]);
 
 
 
@@ -244,13 +274,24 @@ export default function Home() {
 
   const filteredJobs = useMemo(() => jobs.filter((job) => jobStatusFilter === 'All' || job.status === jobStatusFilter), [jobs, jobStatusFilter]);
   const filteredCustomers = useMemo(() => customers.filter((customer) => !customerSearch.trim() || [customer.name, customer.email, customer.phone].join(' ').toLowerCase().includes(customerSearch.trim().toLowerCase())), [customers, customerSearch]);
+  const inboxUnread = useMemo(() => inboxMessages.filter((message) => message.status === 'new').length, [inboxMessages]);
+  const inboxNeedsReview = useMemo(() => inboxMessages.filter((message) => message.needsHumanReview).length, [inboxMessages]);
+  const filteredInboxMessages = useMemo(() => inboxMessages.filter((message) => {
+    if (inboxFilter === 'Needs review') return message.needsHumanReview;
+    if (inboxFilter === 'Inquiries') return message.category === 'inquiry';
+    if (inboxFilter === 'Questions') return message.category === 'query';
+    if (inboxFilter === 'Feedback') return message.category === 'feedback' || message.category === 'complaint';
+    if (inboxFilter === 'Quote replies') return message.category === 'quote_response';
+    return true;
+  }), [inboxMessages, inboxFilter]);
+  const selectedInboxMessage = inboxMessages.find((message) => message.id === selectedInboxId) || filteredInboxMessages[0] || null;
 
   const selectedQuote = quotes.find((quote) => quote.id === selectedQuoteId) || null;
   const selectedQuoteTotal = selectedQuote ? (Number.parseFloat(selectedQuote.basePrice) || 0) + (Number.parseFloat(selectedQuote.extras) || 0) : 0;
   const quoteCanBeReady = Boolean(selectedQuote && selectedQuote.customerName.trim() && selectedQuoteTotal > 0 && selectedQuote.checkedFollowUps.length === selectedQuote.followUpItems.length);
-  const pageTitle: Record<View, string> = { overview: 'Overview', intake: 'Intake desk', quotes: selectedQuote ? selectedQuote.number : 'Quotes', jobs: 'Jobs', customers: 'Customers', settings: 'Settings' };
+  const pageTitle: Record<View, string> = { overview: 'Overview', inbox: 'Inbox', intake: 'Intake desk', quotes: selectedQuote ? selectedQuote.number : 'Quotes', jobs: 'Jobs', customers: 'Customers', settings: 'Settings' };
 
-  const navigate = (next: View) => { setView(next); setError(''); if (next !== 'quotes') setSelectedQuoteId(''); };
+  const navigate = (next: View) => { setView(next); setError(''); if (next !== 'quotes') setSelectedQuoteId(''); if (next !== 'inbox') setSelectedInboxId(''); };
   const newInquiry = () => { setView('intake'); setInquiry(''); setResult(''); setError(''); setCopied(false); setLastRunAt(null); setLastModel(''); setActiveBriefId(''); setSelectedQuoteId(''); };
 
   const handleAnalyze = async (event: React.FormEvent) => {
@@ -271,6 +312,34 @@ export default function Home() {
   };
 
   const openBrief = (brief: BriefRecord) => { setInquiry(brief.inquiry); setResult(brief.result); setLastRunAt(brief.createdAt); setLastModel(brief.model); setActiveBriefId(brief.id); setView('intake'); setError(''); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+
+  const updateInboxMessage = async (messageId: string, patch: { status?: InboxStatus; category?: InboxCategory; needsHumanReview?: boolean }) => {
+    try {
+      const response = await fetch('/api/inbox', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId, ...patch }),
+      });
+      const data: { message?: InboxMessage; error?: string } = await response.json();
+      if (!response.ok || !data.message) throw new Error(data.error || 'Could not update the inbox message.');
+      setInboxMessages((current) => current.map((item) => item.id === messageId ? data.message as InboxMessage : item));
+      return true;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not update the inbox message.');
+      return false;
+    }
+  };
+
+  const openInboxAsIntake = async (message: InboxMessage) => {
+    setInquiry(message.body);
+    setResult('');
+    setActiveBriefId('');
+    setLastRunAt(null);
+    setLastModel('');
+    setView('intake');
+    setSelectedInboxId('');
+    if (message.status === 'new') await updateInboxMessage(message.id, { status: 'in_progress' });
+  };
 
   const copyText = async (text: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
@@ -351,7 +420,7 @@ export default function Home() {
   };
 
   const navItems: { view: View; label: string; icon: Parameters<typeof Icon>[0]['name'] }[] = [
-    { view: 'overview', label: 'Overview', icon: 'overview' }, { view: 'intake', label: 'Intake desk', icon: 'inbox' }, { view: 'quotes', label: 'Quotes', icon: 'quote' }, { view: 'jobs', label: 'Jobs', icon: 'jobs' }, { view: 'customers', label: 'Customers', icon: 'customers' }, { view: 'settings', label: 'Settings', icon: 'settings' },
+    { view: 'overview', label: 'Overview', icon: 'overview' }, { view: 'inbox', label: 'Inbox', icon: 'inbox' }, { view: 'intake', label: 'Intake desk', icon: 'inbox' }, { view: 'quotes', label: 'Quotes', icon: 'quote' }, { view: 'jobs', label: 'Jobs', icon: 'jobs' }, { view: 'customers', label: 'Customers', icon: 'customers' }, { view: 'settings', label: 'Settings', icon: 'settings' },
   ];
 
   return (
@@ -370,8 +439,94 @@ export default function Home() {
 
           <main className="mx-auto max-w-[1480px] px-5 py-6 sm:px-8">
             {view === 'overview' && <div className="space-y-6"><section className="flex flex-col justify-between gap-5 xl:flex-row xl:items-end"><div><div className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Operations overview</div><h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Keep every cleaning lead moving.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Capture an inquiry, structure it with local AI, prepare a quote, and keep the next operational step visible.</p></div><button type="button" onClick={newInquiry} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700"><Icon name="plus" /> New inquiry</button></section>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[['Briefs', totalBriefs, 'AI intake records'], ['Quotes', totalQuotes, `${readyQuotes} ready to send`], ['Jobs', totalJobs, 'Ready to schedule or beyond'], ['Customers', customers.length, 'Seen in saved quotes']].map(([label, value, copy]) => <div key={label as string} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div><div className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{value}</div><div className="mt-1 text-[11px] text-slate-500">{copy}</div></div>)}</div>
-              <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]"><section className="rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><div className="text-sm font-semibold text-slate-950">Recent quotes</div><div className="mt-0.5 text-[11px] text-slate-500">Latest saved work</div></div><button type="button" onClick={() => navigate('quotes')} className="text-[11px] font-semibold text-teal-700">View all</button></div>{quotes.length ? <div className="divide-y divide-slate-100">{quotes.slice(0, 6).map((quote) => <button key={quote.id} type="button" onClick={() => { setSelectedQuoteId(quote.id); setView('quotes'); }} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-slate-50"><div className="min-w-0"><div className="flex items-center gap-2"><span className="text-xs font-semibold text-slate-900">{quote.number}</span><span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${quote.status === 'Ready to send' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{quote.status}</span></div><div className="mt-1 truncate text-xs text-slate-500">{quote.customerName || 'Customer missing'} · {quote.propertySummary || 'Property missing'}</div></div><div className="shrink-0 text-right"><div className="text-xs font-semibold text-slate-900">{money(Number.parseFloat(quote.basePrice || '0') + Number.parseFloat(quote.extras || '0'), settings.currency)}</div><div className="mt-1 text-[10px] text-slate-400">{formatDate(quote.updatedAt)}</div></div></button>)}</div> : <div className="px-5 py-12 text-center text-xs text-slate-400">No quotes yet. Start at Intake desk.</div>}</section><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700"><Icon name="spark" /></span>Workflow</div><div className="mt-4 space-y-3">{[['1', 'Capture', 'Paste the customer message exactly as received.'], ['2', 'Structure', 'Review the AI-generated operations brief.'], ['3', 'Quote', 'Add pricing and a customer-facing draft.'], ['4', 'Move', 'Mark ready and hand it to the jobs queue.']].map(([n, title, copy]) => <div key={n} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3"><span className="font-mono text-[10px] font-semibold text-teal-700">{n}</span><div><div className="text-xs font-semibold text-slate-800">{title}</div><div className="mt-0.5 text-[11px] leading-5 text-slate-500">{copy}</div></div></div>)}</div></section></div></div>}
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[['Inbox', inboxUnread, `${inboxUnread} new · ${inboxNeedsReview} need review`], ['Quotes', totalQuotes, `${readyQuotes} ready to send`], ['Jobs', totalJobs, 'Ready to schedule or beyond'], ['Customers', customers.length, 'Seen in saved quotes']].map(([label, value, copy]) => <div key={label as string} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div><div className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{value}</div><div className="mt-1 text-[11px] text-slate-500">{copy}</div></div>)}</div>
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]"><section className="rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><div className="text-sm font-semibold text-slate-950">Recent quotes</div><div className="mt-0.5 text-[11px] text-slate-500">Latest saved work</div></div><button type="button" onClick={() => navigate('quotes')} className="text-[11px] font-semibold text-teal-700">View all</button></div>{quotes.length ? <div className="divide-y divide-slate-100">{quotes.slice(0, 6).map((quote) => <button key={quote.id} type="button" onClick={() => { setSelectedQuoteId(quote.id); setView('quotes'); }} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-slate-50"><div className="min-w-0"><div className="flex items-center gap-2"><span className="text-xs font-semibold text-slate-900">{quote.number}</span><span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${quote.status === 'Ready to send' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{quote.status}</span></div><div className="mt-1 truncate text-xs text-slate-500">{quote.customerName || 'Customer missing'} · {quote.propertySummary || 'Property missing'}</div></div><div className="shrink-0 text-right"><div className="text-xs font-semibold text-slate-900">{money(Number.parseFloat(quote.basePrice || '0') + Number.parseFloat(quote.extras || '0'), settings.currency)}</div><div className="mt-1 text-[10px] text-slate-400">{formatDate(quote.updatedAt)}</div></div></button>)}</div> : <div className="px-5 py-12 text-center text-xs text-slate-400">No quotes yet. Start at Intake desk.</div>}</section><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700"><Icon name="spark" /></span>Workflow</div><div className="mt-4 space-y-3">{[['1', 'Capture', 'Bring customer email into Inbox automatically, or paste it manually as a fallback.'], ['2', 'Triage', 'AI separates inquiries, questions, feedback, and quote replies.'], ['3', 'Quote', 'Add pricing and a customer-facing draft.'], ['4', 'Move', 'Mark ready and hand it to the jobs queue.']].map(([n, title, copy]) => <div key={n} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3"><span className="font-mono text-[10px] font-semibold text-teal-700">{n}</span><div><div className="text-xs font-semibold text-slate-800">{title}</div><div className="mt-0.5 text-[11px] leading-5 text-slate-500">{copy}</div></div></div>)}</div></section></div></div>}
+
+            {view === 'inbox' && <div className="space-y-5">
+              <section className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
+                <div>
+                  <div className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Customer communication</div>
+                  <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Inbox</h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Bring customer emails into TaskTuck, let AI sort the intent, and turn the right messages into operational work.</p>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm"><div className="text-[10px] text-slate-400">New</div><div className="mt-1 text-lg font-semibold text-slate-900">{inboxUnread}</div></div>
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm"><div className="text-[10px] text-slate-400">Review</div><div className="mt-1 text-lg font-semibold text-slate-900">{inboxNeedsReview}</div></div>
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm"><div className="text-[10px] text-slate-400">Total</div><div className="mt-1 text-lg font-semibold text-slate-900">{inboxMessages.length}</div></div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  {(['All', 'Inquiries', 'Questions', 'Feedback', 'Quote replies', 'Needs review'] as const).map((filter) => (
+                    <button key={filter} type="button" onClick={() => { setInboxFilter(filter); setSelectedInboxId(''); }} className={\`rounded-lg px-3 py-2 text-[11px] font-semibold \${inboxFilter === filter ? 'bg-teal-50 text-teal-800' : 'text-slate-500 hover:bg-slate-50'}\`}>{filter}{filter === 'Needs review' && inboxNeedsReview > 0 ? \` · \${inboxNeedsReview}\` : ''}</button>
+                  ))}
+                  <button type="button" onClick={() => { void loadInbox(); }} className="ml-auto rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">{inboxLoading ? 'Refreshing…' : 'Refresh'}</button>
+                </div>
+              </section>
+
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="border-b border-slate-200 px-5 py-4">
+                    <div className="text-sm font-semibold text-slate-950">Messages</div>
+                    <div className="mt-0.5 text-[11px] text-slate-500">{filteredInboxMessages.length} matching message{filteredInboxMessages.length === 1 ? '' : 's'}</div>
+                  </div>
+                  {filteredInboxMessages.length ? <div className="divide-y divide-slate-100">{filteredInboxMessages.map((message) => {
+                    const categoryLabel = ({ inquiry: 'Inquiry', query: 'Question', feedback: 'Feedback', complaint: 'Complaint', quote_response: 'Quote reply', spam: 'Spam', other: 'Other' } as Record<InboxCategory, string>)[message.category];
+                    const active = selectedInboxMessage?.id === message.id;
+                    return <button key={message.id} type="button" onClick={() => setSelectedInboxId(message.id)} className={\`w-full border-l-2 px-4 py-4 text-left transition \${active ? 'border-teal-500 bg-teal-50/60' : 'border-transparent hover:bg-slate-50'}\`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2"><span className="truncate text-xs font-semibold text-slate-900">{message.customerName || message.fromEmail || 'Unknown customer'}</span><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-600">{categoryLabel}</span>{message.needsHumanReview && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-semibold text-amber-700">Review</span>}</div>
+                          <div className="mt-1 truncate text-xs text-slate-700">{message.subject}</div>
+                          <div className="mt-1 line-clamp-2 text-[11px] leading-5 text-slate-500">{message.summary || message.preview}</div>
+                        </div>
+                        <div className="shrink-0 text-right text-[10px] text-slate-400">{formatTime(message.receivedAt)}<div className="mt-1">{message.status === 'new' ? 'New' : message.status.replace('_', ' ')}</div></div>
+                      </div>
+                    </button>;
+                  })}</div> : <div className="px-5 py-14 text-center"><div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><Icon name="inbox" /></div><div className="mt-4 text-sm font-semibold text-slate-700">{inboxMessages.length ? 'Nothing in this filter' : 'Your inbox is ready'}</div><p className="mt-1.5 text-xs leading-5 text-slate-400">{inboxMessages.length ? 'Try another inbox filter.' : 'Forward customer mail to your TaskTuck inbox address from Settings to start receiving messages.'}</p></div>}
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  {selectedInboxMessage ? <div className="p-5">
+                    <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-teal-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-teal-700">{({ inquiry: 'Inquiry', query: 'Question', feedback: 'Feedback', complaint: 'Complaint', quote_response: 'Quote reply', spam: 'Spam', other: 'Other' } as Record<InboxCategory, string>)[selectedInboxMessage.category]}</span>
+                          {selectedInboxMessage.secondaryCategory !== 'none' && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-semibold text-slate-500">Also {selectedInboxMessage.secondaryCategory.replace('_', ' ')}</span>}
+                          {selectedInboxMessage.needsHumanReview && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[9px] font-semibold text-amber-700">Needs review</span>}
+                        </div>
+                        <h3 className="mt-3 text-lg font-semibold tracking-tight text-slate-950">{selectedInboxMessage.subject}</h3>
+                        <div className="mt-1 text-[11px] text-slate-500">{selectedInboxMessage.customerName || 'Unknown customer'} · {selectedInboxMessage.fromEmail || 'Email missing'} · {formatDate(selectedInboxMessage.receivedAt)} {formatTime(selectedInboxMessage.receivedAt)}</div>
+                      </div>
+                      <select value={selectedInboxMessage.status} onChange={(event) => { void updateInboxMessage(selectedInboxMessage.id, { status: event.target.value as InboxStatus }); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 outline-none">
+                        <option value="new">New</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="archived">Archived</option>
+                      </select>
+                    </div>
+
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4"><div className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400">AI summary</div><p className="mt-2 text-xs leading-5 text-slate-700">{selectedInboxMessage.summary || selectedInboxMessage.preview}</p></div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4"><div className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400">Suggested action</div><p className="mt-2 text-xs leading-5 text-slate-700">{selectedInboxMessage.suggestedAction || 'Review this message.'}</p></div>
+                    </div>
+
+                    <div className="mt-5 rounded-xl border border-slate-200 bg-white">
+                      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3"><div className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400">Customer message</div><button type="button" onClick={() => { void copyText(selectedInboxMessage.body); }} className="text-[10px] font-semibold text-slate-500 hover:text-slate-800">{copied ? 'Copied' : 'Copy'}</button></div>
+                      <div className="max-h-[360px] overflow-auto whitespace-pre-wrap px-4 py-4 text-xs leading-6 text-slate-700">{selectedInboxMessage.body}</div>
+                    </div>
+
+                    {selectedInboxMessage.attachments.length > 0 && <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400">Attachments</div><div className="mt-2 flex flex-wrap gap-2">{selectedInboxMessage.attachments.map((attachment) => <span key={attachment.filename} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] text-slate-600">{attachment.filename}</span>)}</div></div>}
+
+                    <div className="mt-5 flex flex-wrap items-center gap-2">
+                      <button type="button" onClick={() => { void openInboxAsIntake(selectedInboxMessage); }} className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2.5 text-[11px] font-semibold text-white"><Icon name="spark" />Open in Intake desk</button>
+                      {selectedInboxMessage.needsHumanReview ? <button type="button" onClick={() => { void updateInboxMessage(selectedInboxMessage.id, { needsHumanReview: false }); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-semibold text-slate-600">Clear review flag</button> : <span className="rounded-lg bg-emerald-50 px-3 py-2.5 text-[11px] font-semibold text-emerald-700">AI triage looks confident</span>}
+                      <select value={selectedInboxMessage.category} onChange={(event) => { void updateInboxMessage(selectedInboxMessage.id, { category: event.target.value as InboxCategory }); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-semibold text-slate-600 outline-none">
+                        <option value="inquiry">Inquiry</option><option value="query">Question</option><option value="feedback">Feedback</option><option value="complaint">Complaint</option><option value="quote_response">Quote reply</option><option value="spam">Spam</option><option value="other">Other</option>
+                      </select>
+                    </div>
+                  </div> : <div className="flex min-h-[500px] items-center justify-center px-8 text-center text-xs text-slate-400">Select a message to review.</div>}
+                </section>
+              </div>
+            </div>}
 
             {view === 'intake' && <div className="space-y-5"><section className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end"><div><div className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Customer message → operations brief</div><h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Prepare the next quote without digging through messages.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Paste the inquiry as-is. TaskTuck structures the customer, property, scope, timing, access, and follow-up items your team needs.</p></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{[['Briefs', totalBriefs], ['Status', loading ? 'Analyzing' : result ? 'Brief ready' : 'Ready'], ['Processing', 'Local']].map(([label, value]) => <div key={label} className="min-w-[110px] rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm"><div className="text-[10px] text-slate-400">{label}</div><div className="mt-1 text-xs font-semibold text-slate-800">{value}</div></div>)}</div></section>
               <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_360px]"><section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><div className="text-sm font-semibold text-slate-950">New inquiry</div><div className="mt-0.5 text-[11px] text-slate-500">Email, voicemail transcript, web form, or desk note</div></div><div className="hidden items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 sm:flex"><span className={`h-1.5 w-1.5 rounded-full ${loading ? 'bg-amber-500' : result ? 'bg-emerald-500' : 'bg-teal-500'}`} />{loading ? 'Analyzing' : result ? 'Brief ready' : 'Ready for intake'}</div></div><div className="p-5"><div className="mb-3 flex flex-wrap gap-2">{SAMPLES.map((sample) => <button key={sample.label} type="button" onClick={() => { setInquiry(sample.text); setResult(''); setError(''); setActiveBriefId(''); }} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800">Use {sample.label}</button>)}</div><form id="analyze-form" onSubmit={handleAnalyze}><div className="relative"><textarea aria-label="Customer inquiry" className="min-h-[300px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50/80 p-4 pb-10 text-sm leading-7 text-slate-800 outline-none placeholder:text-slate-400 focus:border-teal-300 focus:bg-white focus:ring-4 focus:ring-teal-500/10" placeholder="Paste the customer message here…" value={inquiry} onChange={(event) => { setInquiry(event.target.value); if (error) setError(''); }} disabled={loading} /><div className="pointer-events-none absolute bottom-3 left-4 right-4 flex items-center justify-between text-[10px] text-slate-400"><span>Ctrl/⌘ + Enter to analyze</span><span className={inquiry.length > 20000 ? 'font-semibold text-rose-600' : ''}>{inquiry.length.toLocaleString()} / 20,000</span></div></div><div className="mt-3 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between"><button type="button" onClick={newInquiry} disabled={!inquiry && !result} className="text-xs font-medium text-slate-500 hover:text-slate-800 disabled:opacity-40">Clear workspace</button><button type="submit" disabled={!inquiry.trim() || inquiry.length > 20000 || loading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-40">{loading ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />Analyzing inquiry</> : <>Analyze inquiry <Icon name="arrow" /></>}</button></div></form></div></section><aside className="space-y-5"><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><div className="text-sm font-semibold text-slate-950">Recent briefs</div><div className="mt-0.5 text-[11px] text-slate-500">Saved to your workspace</div></div>{briefs.length > 0 && <button type="button" onClick={() => setBriefs([])} className="text-[10px] font-semibold text-slate-400 hover:text-slate-700">Clear</button>}</div>{briefs.length ? <div className="mt-4 space-y-1.5">{briefs.slice(0, 8).map((brief) => <button key={brief.id} type="button" onClick={() => openBrief(brief)} className={`w-full rounded-xl border px-3 py-2.5 text-left ${brief.id === activeBriefId ? 'border-teal-200 bg-teal-50' : 'border-transparent bg-slate-50 hover:border-slate-200 hover:bg-white'}`}><div className="truncate text-xs font-semibold text-slate-800">{getJobLabel(brief.inquiry)}</div><div className="mt-1 flex items-center justify-between text-[10px] text-slate-400"><span>{formatDate(brief.createdAt)}</span><span>{formatTime(brief.createdAt)}</span></div></button>)}</div> : <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-5 text-[11px] leading-5 text-slate-400">Your analyzed inquiries will appear here.</div>}</section><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-xs font-semibold text-slate-800"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-700"><Icon name="spark" /></span>Brief coverage</div><p className="mt-2 text-[11px] leading-5 text-slate-500">The analyzer looks for the signals an operator usually needs before a quote.</p><div className="mt-4 grid grid-cols-2 gap-2">{BRIEF_SECTIONS.map((item) => <div key={item} className="rounded-lg border border-slate-200 px-2.5 py-2 text-[10px] font-medium text-slate-600">{item.replace(' & ', ' + ')}</div>)}</div></section></aside></div>
@@ -396,9 +551,9 @@ export default function Home() {
 
             {view === 'customers' && <div className="space-y-5"><section><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Customer directory</div><h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Customers</h2><p className="mt-2 text-sm text-slate-500">Customers appear from the details you save on quotes.</p></section><div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><label className="relative block"><span className="sr-only">Search customers</span><span className="absolute left-3 top-3 text-slate-400"><Icon name="search" /></span><input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-xs outline-none focus:border-teal-300 focus:bg-white" placeholder="Search customer, email, or phone…" /></label></div><section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">{filteredCustomers.length ? <div className="divide-y divide-slate-100">{filteredCustomers.map((customer) => <div key={customer.name} className="flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-semibold text-slate-900">{customer.name}</div><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500"><span>{customer.email || 'Email missing'}</span><span>{customer.phone || 'Phone missing'}</span></div></div><div className="text-left sm:text-right"><div className="text-xs font-semibold text-slate-800">{customer.quotes} quote{customer.quotes === 1 ? '' : 's'}</div><div className="mt-1 text-[10px] text-slate-400">Last activity · {formatDate(customer.lastActivity)}</div></div></div>)}</div> : <div className="px-5 py-14 text-center text-xs text-slate-400">No matching customers.</div>}</section></div>}
 
-            {view === 'settings' && <div className="space-y-5"><section><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Workspace settings</div><h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Settings</h2><p className="mt-2 text-sm text-slate-500">These settings control the local quote experience in this browser.</p></section><div className="grid gap-5 xl:grid-cols-2"><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-sm font-semibold text-slate-950">Business identity</div><div className="mt-4 space-y-3"><label><span className="text-xs font-medium text-slate-700">Business name</span><input value={settings.businessName} onChange={(event) => setSettings((current) => ({ ...current, businessName: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label><div className="grid gap-3 sm:grid-cols-2"><label><span className="text-xs font-medium text-slate-700">Email</span><input value={settings.email} onChange={(event) => setSettings((current) => ({ ...current, email: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label><label><span className="text-xs font-medium text-slate-700">Phone</span><input value={settings.phone} onChange={(event) => setSettings((current) => ({ ...current, phone: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label></div><label><span className="text-xs font-medium text-slate-700">Currency</span><select value={settings.currency} onChange={(event) => setSettings((current) => ({ ...current, currency: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white"><option value="USD">USD — US Dollar</option><option value="CAD">CAD — Canadian Dollar</option><option value="GBP">GBP — British Pound</option><option value="EUR">EUR — Euro</option><option value="AUD">AUD — Australian Dollar</option><option value="INR">INR — Indian Rupee</option></select></label></div></section><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-sm font-semibold text-slate-950">Quote defaults</div><div className="mt-4 space-y-3"><label><span className="text-xs font-medium text-slate-700">Default customer note</span><textarea value={settings.defaultNote} onChange={(event) => setSettings((current) => ({ ...current, defaultNote: event.target.value }))} className="mt-1 min-h-[130px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-6 outline-none focus:border-teal-300 focus:bg-white" /></label><label><span className="text-xs font-medium text-slate-700">Default terms</span><textarea value={settings.terms} onChange={(event) => setSettings((current) => ({ ...current, terms: event.target.value }))} className="mt-1 min-h-[120px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-6 outline-none focus:border-teal-300 focus:bg-white" /></label><div className="rounded-xl border border-teal-100 bg-teal-50/70 p-4"><div className="text-xs font-semibold text-teal-900">Local-first storage</div><p className="mt-1 text-[11px] leading-5 text-teal-900/60">Briefs, quotes, jobs, and these settings stay in this browser. Nothing is sent automatically.</p></div></div></section></div></div>}
+            {view === 'settings' && <div className="space-y-5"><section><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Workspace settings</div><h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Settings</h2><p className="mt-2 text-sm text-slate-500">These settings control the local quote experience in this browser.</p></section><div className="grid gap-5 xl:grid-cols-3"><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-sm font-semibold text-slate-950">Business identity</div><div className="mt-4 space-y-3"><label><span className="text-xs font-medium text-slate-700">Business name</span><input value={settings.businessName} onChange={(event) => setSettings((current) => ({ ...current, businessName: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label><div className="grid gap-3 sm:grid-cols-2"><label><span className="text-xs font-medium text-slate-700">Email</span><input value={settings.email} onChange={(event) => setSettings((current) => ({ ...current, email: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label><label><span className="text-xs font-medium text-slate-700">Phone</span><input value={settings.phone} onChange={(event) => setSettings((current) => ({ ...current, phone: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white" /></label></div><label><span className="text-xs font-medium text-slate-700">Currency</span><select value={settings.currency} onChange={(event) => setSettings((current) => ({ ...current, currency: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-teal-300 focus:bg-white"><option value="USD">USD — US Dollar</option><option value="CAD">CAD — Canadian Dollar</option><option value="GBP">GBP — British Pound</option><option value="EUR">EUR — Euro</option><option value="AUD">AUD — Australian Dollar</option><option value="INR">INR — Indian Rupee</option></select></label></div></section><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-sm font-semibold text-slate-950">Quote defaults</div><div className="mt-4 space-y-3"><label><span className="text-xs font-medium text-slate-700">Default customer note</span><textarea value={settings.defaultNote} onChange={(event) => setSettings((current) => ({ ...current, defaultNote: event.target.value }))} className="mt-1 min-h-[130px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-6 outline-none focus:border-teal-300 focus:bg-white" /></label><label><span className="text-xs font-medium text-slate-700">Default terms</span><textarea value={settings.terms} onChange={(event) => setSettings((current) => ({ ...current, terms: event.target.value }))} className="mt-1 min-h-[120px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-6 outline-none focus:border-teal-300 focus:bg-white" /></label><div className="rounded-xl border border-teal-100 bg-teal-50/70 p-4"><div className="text-xs font-semibold text-teal-900">Cloud workspace</div><p className="mt-1 text-[11px] leading-5 text-teal-900/60">Briefs, quotes, jobs, inbox messages, and settings are saved to your TaskTuck workspace.</p></div></div></section><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-sm font-semibold text-slate-950">Customer email inbox</div><p className="mt-1 text-[11px] leading-5 text-slate-500">Keep the business mailbox you already use. Forward customer mail automatically into TaskTuck.</p><div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400">Your TaskTuck address</div><div className="mt-2 break-all text-sm font-semibold text-slate-900">inboxAddress || "Generating…" </div><button type="button" onClick={() => { if (inboxAddress) void copyText(inboxAddress); }} disabled={!inboxAddress} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 disabled:opacity-40"><Icon name="copy" />Copy address</button></div><div className="mt-4 space-y-2 text-[11px] leading-5 text-slate-500"><p><span className="font-semibold text-slate-700">1.</span> In Cloudflare, create an Email Routing rule for <span className="font-mono text-slate-700">inbox@task-tuck.com</span> that sends to the <span className="font-semibold text-slate-700">task-tuck</span> Worker.</p><p><span className="font-semibold text-slate-700">2.</span> In the business Gmail or Outlook account, create a forwarding/filter rule that forwards customer mail to the address above.</p><p><span className="font-semibold text-slate-700">3.</span> TaskTuck receives the message, AI triages it, and the employee reviews it in Inbox. The original mailbox can remain the business's source of truth.</p></div><div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-[10px] leading-5 text-amber-900">For the first version, this is forwarding rather than direct Gmail/Outlook OAuth. It avoids making TaskTuck require access to the whole mailbox.</div></section></div></div>}
 
-            <footer className="mt-7 flex flex-col gap-1 border-t border-slate-200 py-5 text-[10px] text-slate-400 sm:flex-row sm:items-center sm:justify-between"><span>{settings.businessName} · Cloud workspace</span><span>AI intake via your configured provider</span></footer>
+            <footer className="mt-7 flex flex-col gap-1 border-t border-slate-200 py-5 text-[10px] text-slate-400 sm:flex-row sm:items-center sm:justify-between"><span>{settings.businessName} · Cloud workspace</span><span>Inbox + AI via your configured workflow</span></footer>
           </main>
         </div>
       </div>
