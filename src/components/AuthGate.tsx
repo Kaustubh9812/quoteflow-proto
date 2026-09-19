@@ -77,7 +77,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           });
 
       if (response.error) {
-        setError(response.error.message || 'Authentication failed. Please try again.');
+        if (response.error.status === 403 || response.error.code === 'EMAIL_NOT_VERIFIED') {
+          setError('Please verify your email address. We sent you a new verification link.');
+        } else {
+          setError(response.error.message || 'Authentication failed. Please try again.');
+        }
       } else if (mode === 'sign-up') {
         setSuccess('Account created. Please check your email to verify your address.');
       }
