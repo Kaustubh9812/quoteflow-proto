@@ -78,6 +78,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
       if (response.error) {
         setError(response.error.message || 'Authentication failed. Please try again.');
+      } else if (mode === 'sign-up') {
+        setSuccess('Account created. Please check your email to verify your address.');
       }
     } catch {
       setError('Something went wrong. Please try again.');
