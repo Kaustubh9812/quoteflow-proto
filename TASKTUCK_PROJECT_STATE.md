@@ -1486,8 +1486,11 @@ Important:
 Current production:
 https://task-tuck.com
 
-Latest branch checkpoint:
+Latest source checkpoint:
 95479ccd53155115edf016ded7e554be97700e3f
+
+Latest documentation/handoff commit:
+26dec974ebe8ad5ce7b2b6dc88b1b056fda4588b — Expand TaskTuck handoff with full current test state
 
 Latest production deployment version:
 21d0572f-c7f3-4608-a0a3-e3abd64b308a
