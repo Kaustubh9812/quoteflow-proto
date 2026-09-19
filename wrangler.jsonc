@@ -5,7 +5,7 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
-	"main": "src/worker.ts",
+	"main": "./worker/index.ts",
 	"preview_urls": true,
 	"vars": {
 		"BETTER_AUTH_URL": "https://task-tuck.com",
