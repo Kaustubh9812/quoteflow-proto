@@ -479,15 +479,31 @@ src/app/page.tsx
 Views:
 
 - Overview
+- Inbox
 - Intake desk
 - Quotes
 - Jobs
 - Customers
 - Settings
 
+### Inbox
+
+- unified customer message queue
+- automatic inbound-email ingestion through the TaskTuck Worker
+- AI classification into inquiry, query, feedback, complaint, quote response, spam, or other
+- secondary category support
+- confidence and human-review flag
+- AI summary and suggested action
+- customer and quote matching where possible
+- status workflow: New, In progress, Resolved, Archived
+- manual recategorization and review-flag clearing
+- open an inbound message directly in Intake desk
+- attachment filename visibility
+- 20-second inbox refresh polling
+
 ### Intake
 
-- new inquiry
+- manual inquiry fallback
 - sample inquiries
 - analyze
 - recent briefs
@@ -567,6 +583,8 @@ Includes:
 - currency
 - default note
 - default terms
+- TaskTuck inbound inbox address
+- customer-mail forwarding setup guidance
 
 Currency options:
 
@@ -607,20 +625,18 @@ Do not rewrite everything at once. Migrate incrementally.
 
 Not yet implemented:
 
+- direct Gmail/Outlook OAuth mailbox integration
+- richer thread synchronization with the source mailbox
+- full attachment storage/download pipeline
 - real scheduling/calendar integration
 - cleaner assignment
-- email sending
 - SMS/WhatsApp
-- automatic quote delivery
-- transactional quote/job email delivery beyond authentication emails
 - Stripe billing
 - subscription plans
 - trial system
 - AI usage metering
 - team invitations
 - organization roles
-- password recovery flow
-- email verification flow
 - full account/profile settings
 - audit log
 - production-grade rate limiting
@@ -665,13 +681,16 @@ npm run build
 
 and received a successful vinext build.
 
-Build routes:
+Build routes currently include:
 
 - /
 - /api/analyze
 - /api/auth/:all+
 - /api/workspace
+- /api/inbox
 - /reset-password
+
+Note: the new inbox source still needs to be pulled, migrated, built, and deployed before it can be considered production-verified.
 
 ESLint was previously cleaned up.
 
@@ -721,6 +740,14 @@ Database:
 
 - migrations/0001_better_auth_core.sql
 - migrations/0002_workspace.sql
+- migrations/0003_inbox.sql
+
+Inbox:
+
+- src/lib/inbox.ts
+- src/app/api/inbox/route.ts
+- src/worker.ts
+- TASKTUCK_INBOX_SETUP.md
 
 Cloudflare:
 
@@ -915,7 +942,7 @@ Then:
 11. Add audit/history.
 12. Add advanced CRM, job timeline, analytics, SMS/WhatsApp and external integrations.
 
-## 32. HOW TO RESUME IN A NEW CHAT
+## 33. HOW TO RESUME IN A NEW CHAT
 
 Tell the next assistant:
 
@@ -933,7 +960,7 @@ TaskTuck is a cleaning-business SaaS workspace at https://task-tuck.com using Cl
 Continue from the exact state in the handoff file, not from scratch.
 ~~~
 
-## 33. CURRENT CHECKLIST CORRECTION
+## 34. CURRENT CHECKLIST CORRECTION
 
 An older checklist in prior conversation notes overstated the amount of unfinished work because it treated every future-scale SaaS feature as if it were a current requirement.
 
@@ -952,7 +979,7 @@ Current reality:
 
 The remaining list is therefore a roadmap, not a list of mandatory unfinished work.
 
-## 34. MOST IMPORTANT FACTS AT A GLANCE
+## 35. MOST IMPORTANT FACTS AT A GLANCE
 
 Product: TaskTuck
 Domain: task-tuck.com
@@ -966,8 +993,8 @@ AI binding: AI
 Production AI model: @cf/google/gemma-4-26b-a4b-it
 Auth: Better Auth
 Auth URL: https://task-tuck.com
-Latest source commit: 1187614c186d1584c4b3a09168ab8f556ff115c1
-Last explicitly confirmed production source commit: 950edb2f5fb0e51233e18b659a964e96fc05d95c1
+Latest source commit on redesign-v2: 28cb7dde17823647c8ce29278b5fd5d50988461a
+Last explicitly confirmed production source commit: f62f544b-68dd-4b57-8852-866b5ab5dcc1 (deployment version ID, not a git commit)
 
 Production is intentionally one small UX commit behind source: commit 1187614c was not deployed because the generic invalid-credentials message was accepted as sufficient.
 
