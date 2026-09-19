@@ -5,12 +5,38 @@ import { authClient } from '@/lib/auth-client';
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const { data: session, isPending } = authClient.useSession();
-  const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
+  const [mode, setMode] = useState<'sign-in' | 'sign-up' | 'forgot'>('sign-in');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  async function handleForgotPassword() {
+    setError('');
+    if (!email.trim()) {
+      setError('Enter your email address.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const response = await authClient.requestPasswordReset({
+        email: email.trim(),
+        redirectTo: window.location.origin + '/reset-password',
+      });
+
+      if (response.error) {
+        setError(response.error.message || 'Unable to send the reset email. Please try again.');
+      } else {
+        setError('If an account exists for that email, a password reset link has been sent.');
+      }
+    } catch {
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -18,6 +44,12 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
     if (!email.trim() || !password) {
       setError('Enter your email and password.');
+      return;
+    }
+
+    if (mode === 'forgot') {
+      event.preventDefault();
+      await handleForgotPassword();
       return;
     }
 
@@ -147,6 +179,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                 />
               </label>
 
+              {mode !== 'forgot' && (
               <label className="block">
                 <span className="mb-1.5 block text-sm font-medium text-slate-700">Password</span>
                 <input
@@ -158,6 +191,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                   placeholder="At least 8 characters"
                 />
               </label>
+              )}
 
               {error && (
                 <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-5 text-red-700">
@@ -170,7 +204,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                 disabled={busy}
                 className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {busy ? 'Working…' : mode === 'sign-in' ? 'Sign in' : 'Create account'}
+                {busy ? 'Working…' : mode === 'forgot' ? 'Send reset link' : mode === 'sign-in' ? 'Sign in' : 'Create account'}
               </button>
             </form>
 
@@ -179,12 +213,12 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={() => {
-                  setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in');
+                  setMode(mode === 'forgot' ? 'sign-in' : mode === 'sign-in' ? 'sign-up' : 'sign-in');
                   setError('');
                 }}
                 className="font-semibold text-slate-950 underline underline-offset-4"
               >
-                {mode === 'sign-in' ? 'Create an account' : 'Sign in'}
+                {mode === 'forgot' ? 'Sign in' : mode === 'sign-in' ? 'Create an account' : 'Sign in'}
               </button>
             </div>
           </div>
