@@ -1202,6 +1202,8 @@ Before modifying source:
 
 Do not make multiple speculative code changes at once.
 
+When a concrete test failure is found, record the exact observed behavior, source cause, fix commit, and required production re-test before marking the test passed.
+
 Do not rewrite working infrastructure because of assumptions.
 
 Do not restart the product from scratch.
