@@ -75,11 +75,15 @@ Production verification status:
 
 Current redesign-v2 branch head:
 
-ced5b3302fc4acb6036d66fafd6fc4683893ac02
+ebef58e174644786c6e8ae92bde5e82452a05e2a
 
 Latest source commit:
 
-Refine quote preview language
+ced5b3302fc4acb6036d66fafd6fc4683893ac02 — Refine quote preview language
+
+Latest documentation commit:
+
+ebef58e174644786c6e8ae92bde5e82452a05e2a — Document TaskTuck UX simplification pass
 
 UX simplification pass commits:
 
