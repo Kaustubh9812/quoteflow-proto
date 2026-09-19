@@ -38,6 +38,7 @@ Working and verified:
 - logout/login persistence
 - Workers AI production analysis
 - Gemma 4 production model
+- source implementation for unified customer Inbox (not yet production-verified)
 - Move-out sample producing a structured brief
 - quote preparation workflow
 - jobs workflow
@@ -51,7 +52,7 @@ Working and verified:
 - password reset flow
 - email verification flow
 - signup email-verification confirmation UI
-- successful local vinext build
+- successful local vinext build (verified before the latest Inbox changes)
 
 The user personally verified that a created workspace remained after signing out and signing back in.
 
@@ -69,15 +70,13 @@ The user personally verified in production that:
 
 ## 3. CURRENT GIT STATE
 
-Latest branch head at the time of this document:
+Latest redesign-v2 source head at the time of this document:
 
-1187614c186d1584c4b3a09168ab8f556ff115c1
+8f8f52fdfcb6a1b6a6c998b591e2b9863db8e697
 
-Commit message:
+This source head contains the unified Inbox feature and its deployment/setup changes. It is NOT yet production-verified in this handoff.
 
-Show verification message for unverified sign-in
-
-Important: this latest source commit is NOT confirmed deployed to production. The last production-confirmed source commit is 950edb2f... .
+The user should pull redesign-v2 before the next local build/deploy.
 
 User's local folder:
 
@@ -182,8 +181,10 @@ Current important values in wrangler.jsonc:
 - Worker name: task-tuck
 - compatibility date: 2026-09-18
 - compatibility flag: nodejs_compat
-- main: vinext/server/fetch-handler
+- main: ./worker/index.ts
+- TASKTUCK_INBOUND_DOMAIN: task-tuck.com
 - BETTER_AUTH_URL: https://task-tuck.com
+- custom Worker entry delegates HTTP traffic to vinext and handles inbound email via email()
 - custom domain: task-tuck.com
 - AI binding: AI
 - D1 binding: task_tuck_db
@@ -235,7 +236,19 @@ workspace (
 
 user_id references Better Auth user(id) with cascade deletion.
 
-Both migrations were applied to the remote database successfully.
+Migration 0003:
+
+migrations/0003_inbox.sql
+
+Adds:
+
+- inbox_alias
+- inbox_json
+- unique index on inbox_alias
+
+0001 and 0002 were applied to the remote database successfully.
+
+0003 exists in source but still needs to be applied to the remote database before the Inbox feature is deployed.
 
 Remote migration command:
 
@@ -500,6 +513,9 @@ Views:
 - open an inbound message directly in Intake desk
 - attachment filename visibility
 - 20-second inbox refresh polling
+- sidebar unread badge
+- separate Feedback and Complaints filters
+- linked-quote navigation when an inbound message matches a quote
 
 ### Intake
 
@@ -681,7 +697,7 @@ npm run build
 
 and received a successful vinext build.
 
-Build routes currently include:
+Build routes expected after the latest source build include:
 
 - /
 - /api/analyze
@@ -690,7 +706,7 @@ Build routes currently include:
 - /api/inbox
 - /reset-password
 
-Note: the new inbox source still needs to be pulled, migrated, built, and deployed before it can be considered production-verified.
+The latest Inbox source has not yet been locally rebuilt or production-verified.
 
 ESLint was previously cleaned up.
 
@@ -993,10 +1009,10 @@ AI binding: AI
 Production AI model: @cf/google/gemma-4-26b-a4b-it
 Auth: Better Auth
 Auth URL: https://task-tuck.com
-Latest source commit on redesign-v2: 28cb7dde17823647c8ce29278b5fd5d50988461a
-Last explicitly confirmed production source commit: f62f544b-68dd-4b57-8852-866b5ab5dcc1 (deployment version ID, not a git commit)
+Latest source commit on redesign-v2: 8f8f52fdfcb6a1b6a6c998b591e2b9863db8e697
+Last production deployment explicitly confirmed by the user before the Inbox feature: the prior successful TaskTuck deployment. The exact source commit for that deployment is not established here.
 
-Production is intentionally one small UX commit behind source: commit 1187614c was not deployed because the generic invalid-credentials message was accepted as sufficient.
+The Inbox feature is intentionally not described as production-verified until the new D1 migration, build, deployment, and email-routing test have all succeeded.
 
 Never expose the current BETTER_AUTH_SECRET.
 
