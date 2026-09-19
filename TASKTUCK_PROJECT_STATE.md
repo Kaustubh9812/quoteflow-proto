@@ -933,7 +933,26 @@ TaskTuck is a cleaning-business SaaS workspace at https://task-tuck.com using Cl
 Continue from the exact state in the handoff file, not from scratch.
 ~~~
 
-## 33. MOST IMPORTANT FACTS AT A GLANCE
+## 33. CURRENT CHECKLIST CORRECTION
+
+An older checklist in prior conversation notes overstated the amount of unfinished work because it treated every future-scale SaaS feature as if it were a current requirement.
+
+Current reality:
+
+- Password recovery: implemented
+- Email verification: implemented
+- Authentication: working
+- AI intake: working
+- D1 persistence: working
+- Core quote workflow: working
+- Jobs: working at MVP level
+- Customers: working at MVP level
+- Settings: working
+- Production domain: working
+
+The remaining list is therefore a roadmap, not a list of mandatory unfinished work.
+
+## 34. MOST IMPORTANT FACTS AT A GLANCE
 
 Product: TaskTuck
 Domain: task-tuck.com
