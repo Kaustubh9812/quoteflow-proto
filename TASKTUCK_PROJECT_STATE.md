@@ -46,6 +46,7 @@ Core MVP implemented and working:
 - Inbox API
 - Inbox D1 migration
 - Cloudflare Email Routing
+- task-focused UX simplification pass across the main workflows
 
 User-verified production behavior:
 
@@ -74,11 +75,16 @@ Production verification status:
 
 Current redesign-v2 branch head:
 
-37a47cbddc01d458a66a204aa37e5661cf9867e
+ced5b3302fc4acb6036d66fafd6fc4683893ac02
 
-Commit:
+Latest source commit:
 
-Add editable quote number field
+Refine quote preview language
+
+UX simplification pass commits:
+
+- be0ee577b532f1120ad1cc867026325c8b70b549 — Simplify TaskTuck UX across core workflows
+- ced5b3302fc4acb6036d66fafd6fc4683893ac02 — Refine quote preview language
 
 User local folder:
 
@@ -628,20 +634,53 @@ Cloudflare's current documentation confirms Worker routing and subaddressing beh
 
 Inbox end-to-end verification is complete.
 
-Immediate test sequence now:
+UX simplification is implemented in source on redesign-v2 but is not yet confirmed in production.
 
-1. Prepare a quote in the Quote editor.
-2. Add customer name and a non-zero total.
-3. Mark the quote Ready.
-4. Click Email quote.
+Before continuing manual quote-email testing:
+
+1. Pull redesign-v2.
+2. Build and deploy the latest source.
+3. Open the production app and do a quick UX smoke test across Today, Inbox, Review inquiry, Quotes, Jobs, Customers, and Settings.
+4. Return to the quote test: prepare a quote, add customer name and a non-zero total, mark it Ready to send, and send it.
 5. Verify the email reaches the external recipient inbox.
-6. Verify subject, quote number, customer details, property, service scope, cleaning date, total, customer note/terms and Reply-To.
+6. Verify subject, quote number, customer details, property, service scope, cleaning date, total, customer message/terms and Reply-To.
 7. Verify the quote remains in the expected state after sending.
 8. Test quote replies against the already-verified quote-number and sender-email matching paths.
 
 Do not modify code during the manual test unless a concrete failure is observed.
 
-## 23. NEAR-TERM HARDENING
+## 23. UX SIMPLIFICATION PASS
+
+Goal:
+
+Make TaskTuck easier to understand at a glance without changing the working data model or core workflow.
+
+Implemented in source on redesign-v2:
+
+- Primary navigation now uses Today, Inbox, Quotes, Jobs, Customers, Settings.
+- Review inquiry is accessed contextually from a new inquiry flow or Inbox instead of being a permanent navigation destination.
+- Today is action-first: it emphasizes items that need attention, ready-to-send quotes, and current work rather than a dashboard of raw metrics.
+- Inbox language is simpler and less AI-centric.
+- Intake is presented as a Review inquiry flow focused on turning a customer message into a quote.
+- Quote language now uses customer-facing terms such as Before you send, Important details, Price, Message to customer, Customer sees, and Send quote.
+- Jobs, Customers, and Settings copy was simplified to plain operational language.
+- Technical AI/model status was removed from the main navigation chrome.
+- Existing persistence, inbox, quote, job, and email behavior was intentionally left unchanged.
+
+UX principles for future work:
+
+- Show the next action, not the internal system state.
+- Prefer plain operational language over product/engineering terminology.
+- Use progressive disclosure for secondary details.
+- Keep AI assistance visible through outcomes, not implementation details.
+- Preserve the flow: message -> review -> quote -> job.
+
+Source-only status:
+
+- UX changes are committed to redesign-v2.
+- Production deployment of the UX pass has not yet been verified.
+
+## 24. NEAR-TERM HARDENING
 
 - re-test authenticated /api/analyze
 - re-test unauthenticated /api/analyze -> 401
@@ -857,6 +896,12 @@ e2f7118
 6e4e0ebc18389a8ecc81350498fa811528d650f4
 - Refine TaskTuck overview and inbox AI confidence display
 
+be0ee577b532f1120ad1cc867026325c8b70b549
+- Simplify TaskTuck UX across core workflows
+
+ced5b3302fc4acb6036d66fafd6fc4683893ac02
+- Refine quote preview language
+
 ## 29. NEW-CHAT RESUME
 
 ~~~text
@@ -871,7 +916,7 @@ Inspect the current GitHub source before changing anything.
 TaskTuck is a cleaning-business SaaS workspace at https://task-tuck.com using Cloudflare Workers, D1, Better Auth, Workers AI/Gemma 4, Resend and Cloudflare Email Routing.
 
 Latest source checkpoint:
-37a47cbddc01d458a66a204aa37e5661cf9867e
+ced5b3302fc4acb6036d66fafd6fc4683893ac02
 
 D1 migration 0003_inbox.sql has been applied remotely.
 
@@ -883,7 +928,7 @@ Routing rule:
 inbox @ task-tuck.com -> Send to Worker -> task-tuck
 Status: Active.
 
-The immediate remaining verification is outbound quote email delivery through Resend.
+The immediate remaining verification is the UX smoke test after deployment, followed by outbound quote email delivery through Resend.
 
 Continue from the exact state in this file, not from scratch.
 ~~~
@@ -906,4 +951,4 @@ Never work on main.
 
 Do not restart the project from scratch.
 
-The core MVP is already working. Inbox end-to-end verification is complete. The immediate job is to finish outbound quote email verification and then move into product hardening/roadmap work.
+The core MVP is already working. Inbox end-to-end verification is complete. A source-level UX simplification pass is now complete on redesign-v2 and needs production smoke testing. After that, finish outbound quote email verification and move into product hardening/roadmap work.
