@@ -1,5 +1,5 @@
 import handler from 'vinext/server/fetch-handler';
-import { processInboundEmail, type InboundEmailMessage, type InboxEnv } from './lib/inbox';
+import { processInboundEmail, type InboundEmailMessage, type InboxEnv } from '../src/lib/inbox';
 
 type WorkerEnv = InboxEnv & {
   BETTER_AUTH_URL?: string;
