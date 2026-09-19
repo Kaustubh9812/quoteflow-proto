@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { authClient } from '@/lib/auth-client';
 import type { InboxCategory, InboxMessage, InboxStatus } from '@/lib/inbox';
 
@@ -200,7 +200,7 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [briefs, quotes, jobs, settings, hydrated, workspaceReady]);
 
-  const loadInbox = async () => {
+  const loadInbox = useCallback(async () => {
     setInboxLoading(true);
     try {
       const response = await fetch('/api/inbox', { cache: 'no-store' });
@@ -213,14 +213,14 @@ export default function Home() {
     } finally {
       setInboxLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!hydrated) return;
     void loadInbox();
     const timer = window.setInterval(() => { void loadInbox(); }, 20000);
     return () => window.clearInterval(timer);
-  }, [hydrated]);
+  }, [hydrated, loadInbox]);
 
 
 
