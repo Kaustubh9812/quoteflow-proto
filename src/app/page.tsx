@@ -185,12 +185,12 @@ export default function Home() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ briefs, quotes, jobs, settings }),
-        keepalive: true,
       });
-      if (!response.ok) throw new Error('Workspace save failed.');
+      const data = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(data?.error || 'Workspace save failed.');
       return true;
-    } catch {
-      setError('Your workspace could not be saved. Please retry.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Your workspace could not be saved.');
       return false;
     }
   };
