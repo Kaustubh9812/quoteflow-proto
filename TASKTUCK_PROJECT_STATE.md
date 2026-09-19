@@ -746,7 +746,7 @@ Inbox:
 
 - src/lib/inbox.ts
 - src/app/api/inbox/route.ts
-- src/worker.ts
+- worker/index.ts
 - TASKTUCK_INBOX_SETUP.md
 
 Cloudflare:
