@@ -55,23 +55,30 @@ User-verified production behavior:
 - Verification email arrived and verification link worked.
 - Unverified accounts were blocked from sign-in.
 - Verified accounts could sign in.
+- Real Gmail/Outlook email reached a real workspace inbox address.
+- Plus-addressed inbox+alias routing worked.
+- The message appeared in TaskTuck Inbox.
+- AI categorization worked on the real inbound message.
+- AI confidence displayed correctly.
+- Human-review flag behavior worked.
+- Quote-number matching worked.
+- Sender-email quote matching worked.
+- Inbox data survived normal workspace saves.
 
-Still NOT fully production-verified:
+Production verification status:
 
-- real external email -> Cloudflare Email Routing -> Worker -> D1 Inbox
-- plus-addressed inbox+alias routing
-- AI triage of a real inbound email
-- full Gmail/Outlook forwarding test
+- Inbox end-to-end: VERIFIED.
+- Quote email delivery: IMPLEMENTED in source and deployed; external recipient delivery still needs explicit verification in the current test run unless already confirmed separately.
 
 ## 3. GIT STATE
 
 Current redesign-v2 branch head:
 
-6e4e0ebc18389a8ecc81350498fa811528d650f4
+37a47cbddc01d458a66a204aa37e5661cf9867e
 
 Commit:
 
-Refine TaskTuck overview and inbox AI confidence display
+Add editable quote number field
 
 User local folder:
 
@@ -218,11 +225,11 @@ Compute > Email Service > Email Routing > Settings
 
 The screenshot previously showed the Subaddressing toggle off.
 
-Status in this handoff:
+Status:
 
-NOT YET CONFIRMED ENABLED.
+CONFIRMED ENABLED.
 
-Before the real inbound test, confirm Subaddressing is ON.
+The user explicitly verified that Cloudflare Subaddressing is ON and that real TaskTuck inbox addresses using the +alias format work end-to-end.
 
 ## 9. WRANGLER
 
@@ -617,19 +624,22 @@ Completed:
 
 Cloudflare's current documentation confirms Worker routing and subaddressing behavior.
 
-## 22. IMMEDIATE NEXT STEPS
+## 22. CURRENT NEXT STEPS
 
-1. Confirm Cloudflare Email Routing Subaddressing is ON.
-2. Open TaskTuck Settings and copy a real workspace inbox address.
-3. Send a real external email from Gmail/Outlook to that address.
-4. Verify it appears in TaskTuck Inbox.
-5. Verify unread count, classification, confidence and review flag.
-6. Check Cloudflare activity logs if needed.
-7. Test a quote-reply email containing a quote number such as TT-1234.
-8. Test sender-email quote matching.
-9. Confirm normal workspace autosaves do not overwrite a newly received message.
+Inbox end-to-end verification is complete.
 
-Only after those pass should Inbox be described as fully production-verified.
+Immediate test sequence now:
+
+1. Prepare a quote in the Quote editor.
+2. Add customer name and a non-zero total.
+3. Mark the quote Ready.
+4. Click Email quote.
+5. Verify the email reaches the external recipient inbox.
+6. Verify subject, quote number, customer details, property, service scope, cleaning date, total, customer note/terms and Reply-To.
+7. Verify the quote remains in the expected state after sending.
+8. Test quote replies against the already-verified quote-number and sender-email matching paths.
+
+Do not modify code during the manual test unless a concrete failure is observed.
 
 ## 23. NEAR-TERM HARDENING
 
@@ -860,18 +870,20 @@ Inspect the current GitHub source before changing anything.
 
 TaskTuck is a cleaning-business SaaS workspace at https://task-tuck.com using Cloudflare Workers, D1, Better Auth, Workers AI/Gemma 4, Resend and Cloudflare Email Routing.
 
-Latest confirmed source/deploy checkpoint:
-6e4e0ebc18389a8ecc81350498fa811528d650f4
+Latest source checkpoint:
+37a47cbddc01d458a66a204aa37e5661cf9867e
 
 D1 migration 0003_inbox.sql has been applied remotely.
 
 Cloudflare Email Routing for task-tuck.com is enabled.
+Subaddressing is enabled.
+The real inbound Gmail/Outlook -> TaskTuck Inbox path has been verified end-to-end.
 
 Routing rule:
 inbox @ task-tuck.com -> Send to Worker -> task-tuck
 Status: Active.
 
-The immediate remaining verification is the real inbound email path. Confirm Subaddressing is enabled, then send a real email to a workspace inbox+<alias>@task-tuck.com and verify it reaches the TaskTuck Inbox.
+The immediate remaining verification is outbound quote email delivery through Resend.
 
 Continue from the exact state in this file, not from scratch.
 ~~~
@@ -894,4 +906,4 @@ Never work on main.
 
 Do not restart the project from scratch.
 
-The core MVP is already working. The immediate job is to finish Inbox end-to-end verification and then move into product hardening/roadmap work.
+The core MVP is already working. Inbox end-to-end verification is complete. The immediate job is to finish outbound quote email verification and then move into product hardening/roadmap work.
