@@ -294,8 +294,8 @@ async function classifyEmail(env: InboxEnv, subject: string, body: string) {
   try {
     const response = await env.AI.run(env.WORKERS_AI_MODEL?.trim() || DEFAULT_WORKERS_AI_MODEL, {
       messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content: 'Classify the email now.' },
+        { role: 'system', content: 'You are TaskTuck email triage. Follow only these classification rules and return JSON matching the requested schema.' },
+        { role: 'user', content: prompt },
       ],
       temperature: 0.1,
       chat_template_kwargs: { enable_thinking: false },
