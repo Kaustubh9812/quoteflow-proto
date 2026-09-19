@@ -245,7 +245,7 @@ export default function Home() {
   const customerItems = useMemo(() => getSection(sections, 'Customer')?.items ?? [], [sections]);
   const constraintItems = useMemo(() => getSection(sections, 'Constraints & signals')?.items ?? [], [sections]);
 
-  const customerName = valueAfterLabel(customerItems, 'Name / contact details').replace(/^Missing$/i, '');
+  const customerName = (valueAfterLabel(customerItems, 'Name') || valueAfterLabel(customerItems, 'Name / contact details')).replace(/^Missing$/i, '');
   const propertySummary = [valueAfterLabel(propertyItems, 'Property type'), valueAfterLabel(propertyItems, 'Size'), valueAfterLabel(propertyItems, 'Rooms')].filter(Boolean).join(' · ');
   const cleaningDate = valueAfterLabel(timingItems, 'Requested date/time');
   const relatedDate = valueAfterLabel(timingItems, 'Requested date');
