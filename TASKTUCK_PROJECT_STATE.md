@@ -1,6 +1,6 @@
 # TaskTuck — Full Project State / Continuation Handoff
 
-Last updated: 2026-09-18
+Last updated: 2026-09-19
 
 This file is the handoff/source-of-context for continuing TaskTuck in a new ChatGPT chat or account if the current conversation runs out of tokens.
 
@@ -46,22 +46,38 @@ Working and verified:
 - markdown quote/brief export
 - recent briefs
 - local Ollama development path
-- authenticated AI endpoint in latest source
+- authenticated AI endpoint
+- Resend transactional email delivery
+- password reset flow
+- email verification flow
+- signup email-verification confirmation UI
 - successful local vinext build
 
 The user personally verified that a created workspace remained after signing out and signing back in.
 
 The user also personally verified that the Move-out inquiry produced a full structured brief in the live app.
 
+The user personally verified in production that:
+- a password-reset email arrives through Resend
+- the password-reset link opens the reset page
+- a new password can be set
+- the new password can be used to sign in
+- a verification email arrives after signup
+- the verification link works
+- an unverified account cannot sign in
+- a verified account can sign in
+
 ## 3. CURRENT GIT STATE
 
 Latest branch head at the time of this document:
 
-e7e000606bd6d5afcc425efe3d4e30227eec2b8e
+1187614c186d1584c4b3a09168ab8f556ff115c1
 
 Commit message:
 
-Protect AI analysis endpoint with authentication
+Show verification message for unverified sign-in
+
+Important: this latest source commit is NOT confirmed deployed to production. The last production-confirmed source commit is 950edb2f... .
 
 User's local folder:
 
@@ -77,24 +93,29 @@ git pull --ff-only origin redesign-v2
 
 The user prefers one concrete step at a time and wants the assistant to edit the repo directly whenever practical.
 
-## 4. IMPORTANT DEPLOYMENT CAVEAT
+## 4. IMPORTANT DEPLOYMENT STATE
 
-The last manually confirmed Cloudflare deployment output showed:
+The user has manually deployed the following completed production changes through the TaskTuck deployment flow:
 
-Worker: task-tuck
-Custom domain: task-tuck.com
-Version ID: ecb5d4a5-7905-4936-8077-9978a92360e3
+- authenticated AI endpoint
+- Resend password-reset delivery
+- password-reset page and route protection
+- email verification
+- signup verification confirmation UI
 
-After that explicit deployment, additional source commits were made, including:
+The last explicitly confirmed production source commit is:
 
-- 2d8bfb10... Fix recent brief rendering error
-- e7e00060... Protect AI analysis endpoint with authentication
+950edb2f5fb0e51233e18b659a964e96fc05d95c1
+- Show email verification confirmation after signup
 
-The user confirmed pulling/building the latest source, but a fresh manual npm run deploy after e7e00060 was not explicitly confirmed in the conversation.
+A later source-only commit exists:
 
-Cloudflare may have auto-deployed from the connected redesign-v2 branch, but do not assume that without checking.
+1187614c186d1584c4b3a09168ab8f556ff115c1
+- Show verification message for unverified sign-in
 
-Immediate next source/deployment task should therefore be to verify whether e7e00060 is live and deploy if necessary.
+That final UX change was intentionally NOT deployed because the user decided the generic "Invalid email or password" message was acceptable.
+
+Do not assume the 1187614c change is live in production.
 
 ## 5. PRODUCTION HOSTING
 
@@ -113,6 +134,13 @@ Cloudflare Workers Build settings:
 - Production branch: redesign-v2
 
 The Worker config uses vinext.
+
+Resend:
+- sending domain: task-tuck.com
+- sender: noreply@task-tuck.com
+- domain verification completed in Resend
+- RESEND_API_KEY stored as a Cloudflare secret
+- API key is not recorded in this document
 
 Deployment command:
 
@@ -232,6 +260,9 @@ Server config uses:
 - BETTER_AUTH_SECRET
 - BETTER_AUTH_URL
 - emailAndPassword enabled
+- requireEmailVerification enabled
+- email verification delivery through Resend
+- password-reset delivery through Resend
 
 Client uses Better Auth React createAuthClient.
 
@@ -241,16 +272,22 @@ AuthGate:
 - shows loading state
 - shows signup
 - shows sign in
+- shows forgot-password flow
+- shows signup verification confirmation
 - renders app for authenticated users
+- allows /reset-password to render without an authenticated session
 
 Production tests confirmed:
 
 - account creation works
-- login works
+- signup produces a verification email
+- sign in works after verification
+- unverified accounts are blocked from sign in
 - sign out works
 - signing back in works
+- password reset works end-to-end
 
-The user used a secondary email address for testing.
+The current production UI intentionally keeps the generic invalid-credentials message for the unverified-account case. A friendlier verification-specific message exists in source commit 1187614c but was not deployed.
 
 ## 11. AUTH SECRET
 
@@ -265,6 +302,51 @@ A previously generated secret was accidentally pasted into the conversation and 
 The real current secret is intentionally NOT recorded in this document.
 
 Never put it into GitHub, chat, README, .env committed files, or this document.
+
+## 11A. EMAIL DELIVERY / VERIFICATION
+
+Provider:
+
+Resend
+
+Production sender:
+
+TaskTuck <noreply@task-tuck.com>
+
+Sending domain:
+
+task-tuck.com
+
+Important files:
+
+- src/lib/auth.ts
+- src/components/AuthGate.tsx
+- src/app/reset-password/page.tsx
+
+Implemented:
+
+- password-reset request from the sign-in screen
+- password-reset email through Resend
+- password-reset link to /reset-password
+- password-reset page
+- password update through Better Auth
+- email verification email after signup
+- verification requirement before password login
+- resend verification behavior on sign-in
+- signup confirmation message telling the user to check email
+
+Production verification:
+
+- password-reset email received
+- reset link opened correctly
+- password successfully changed
+- new password successfully used to sign in
+- verification email received
+- verification link worked
+- verified account successfully signed in
+- unverified account was blocked
+
+Do not record RESEND_API_KEY or any other secret here.
 
 ## 12. AI
 
@@ -530,6 +612,7 @@ Not yet implemented:
 - email sending
 - SMS/WhatsApp
 - automatic quote delivery
+- transactional quote/job email delivery beyond authentication emails
 - Stripe billing
 - subscription plans
 - trial system
@@ -588,6 +671,7 @@ Build routes:
 - /api/analyze
 - /api/auth/:all+
 - /api/workspace
+- /reset-password
 
 ESLint was previously cleaned up.
 
@@ -623,6 +707,7 @@ Authentication:
 - src/lib/auth-client.ts
 - src/components/AuthGate.tsx
 - src/app/api/auth/[...all]/route.ts
+- src/app/reset-password/page.tsx
 
 AI:
 
@@ -717,6 +802,27 @@ f897e4fc5377d2c1c2bf786bea4dc0f4869e2eb6
 e7e000606bd6d5afcc425efe3d4e30227eec2b8e
 - Protect AI analysis endpoint with authentication
 
+12ee696
+- Add Resend password reset email delivery
+
+b9c357e
+- Add password reset page
+
+e9e5997
+- Allow password reset page without authentication
+
+f0c81a2
+- Add forgot password request flow and UI
+
+e2f7118
+- Require verified email for TaskTuck accounts
+
+950edb2
+- Show email verification confirmation after signup
+
+1187614
+- Show verification message for unverified sign-in (source-only; not deployed)
+
 ## 28. EARLIER AUTH COMMITS
 
 During Better Auth implementation, several smaller commits were created, including:
@@ -777,26 +883,37 @@ The working end-to-end MVP is:
 
 ## 31. WHAT IS THE NEXT BEST WORK?
 
+Completed since the original handoff:
+
+- Resend domain verification and API secret setup
+- password-reset email delivery
+- password-reset page and flow
+- email verification
+- signup verification confirmation
+- production verification of the complete auth/email flows
+
 Immediate:
 
-1. Verify e7e00060 is actually deployed to task-tuck.com.
-2. Verify authenticated AI analysis still works.
-3. Verify unauthenticated AI API calls are rejected.
-4. Keep the existing working flow stable.
+1. Keep the working auth and email flows stable.
+2. Verify the authenticated AI path remains healthy.
+3. Verify the unauthenticated AI endpoint continues to return 401.
+4. Remove unused OpenAI dependency after checking for remaining references.
+5. Clean obsolete environment documentation.
 
 Then:
 
 1. Complete account/profile UX.
-2. Add email verification.
-3. Add password reset.
-4. Add rate limiting.
-5. Remove unused OpenAI dependency.
-6. Clean obsolete env documentation.
-7. Refactor page.tsx into components.
-8. Design normalized relational D1 tables.
-9. Add workspace/team model.
-10. Add billing.
-11. Add scheduling/integrations.
+2. Add production-grade rate limiting.
+3. Refactor page.tsx into components.
+4. Design normalized relational D1 tables.
+5. Add organization/workspace and team model.
+6. Add roles and permissions.
+7. Add transactional quote/job email delivery.
+8. Add scheduling/calendar integrations.
+9. Add billing and subscription plans.
+10. Add AI usage metering.
+11. Add audit/history.
+12. Add advanced CRM, job timeline, analytics, SMS/WhatsApp and external integrations.
 
 ## 32. HOW TO RESUME IN A NEW CHAT
 
@@ -830,8 +947,10 @@ AI binding: AI
 Production AI model: @cf/google/gemma-4-26b-a4b-it
 Auth: Better Auth
 Auth URL: https://task-tuck.com
-Latest source commit: e7e000606bd6d5afcc425efe3d4e30227eec2b8e
-Last explicitly confirmed manual production version: ecb5d4a5-7905-4936-8077-9978a92360e3
+Latest source commit: 1187614c186d1584c4b3a09168ab8f556ff115c1
+Last explicitly confirmed production source commit: 950edb2f5fb0e51233e18b659a964e96fc05d95c1
+
+Production is intentionally one small UX commit behind source: commit 1187614c was not deployed because the generic invalid-credentials message was accepted as sufficient.
 
 Never expose the current BETTER_AUTH_SECRET.
 
