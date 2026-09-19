@@ -108,29 +108,41 @@ export async function PUT(request: Request) {
   }
 
   const existing = await env.task_tuck_db
-    .prepare('SELECT inbox_alias, inbox_json, created_at FROM workspace WHERE user_id = ?')
+    .prepare('SELECT created_at, inbox_alias FROM workspace WHERE user_id = ?')
     .bind(user.id)
-    .first<{ inbox_alias: string | null; inbox_json: string; created_at: number }>();
+    .first<{ created_at: number; inbox_alias: string | null }>();
 
   const now = Date.now();
-  const inboxAlias = existing?.inbox_alias || makeInboxAlias();
-  const inboxJson = existing?.inbox_json || '[]';
-  const createdAt = existing?.created_at || now;
 
-  await env.task_tuck_db
-    .prepare('INSERT INTO workspace (user_id, briefs_json, quotes_json, jobs_json, settings_json, created_at, updated_at, inbox_alias, inbox_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET briefs_json = excluded.briefs_json, quotes_json = excluded.quotes_json, jobs_json = excluded.jobs_json, settings_json = excluded.settings_json, updated_at = excluded.updated_at')
-    .bind(
-      user.id,
-      JSON.stringify(body.briefs),
-      JSON.stringify(body.quotes),
-      JSON.stringify(body.jobs),
-      JSON.stringify(body.settings),
-      createdAt,
-      now,
-      inboxAlias,
-      inboxJson,
-    )
-    .run();
+  if (existing) {
+    await env.task_tuck_db
+      .prepare('UPDATE workspace SET briefs_json = ?, quotes_json = ?, jobs_json = ?, settings_json = ?, updated_at = ? WHERE user_id = ?')
+      .bind(
+        JSON.stringify(body.briefs),
+        JSON.stringify(body.quotes),
+        JSON.stringify(body.jobs),
+        JSON.stringify(body.settings),
+        now,
+        user.id,
+      )
+      .run();
+  } else {
+    const inboxAlias = makeInboxAlias();
+    await env.task_tuck_db
+      .prepare('INSERT INTO workspace (user_id, briefs_json, quotes_json, jobs_json, settings_json, created_at, updated_at, inbox_alias, inbox_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(
+        user.id,
+        JSON.stringify(body.briefs),
+        JSON.stringify(body.quotes),
+        JSON.stringify(body.jobs),
+        JSON.stringify(body.settings),
+        now,
+        now,
+        inboxAlias,
+        '[]',
+      )
+      .run();
+  }
 
   return Response.json({ ok: true, updatedAt: now });
 }
