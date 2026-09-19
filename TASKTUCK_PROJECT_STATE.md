@@ -99,7 +99,7 @@ The extraction is correct and usable for the next workflow stage.
 
 ### TC-02 — Incomplete inquiry -> quote readiness
 
-Status: **IN PROGRESS**
+Status: **PASSED**
 
 A quote was created from the above inquiry.
 
@@ -118,23 +118,17 @@ The customer-facing preview currently shows:
 
 This is expected evidence that the quote carries forward missing information instead of inventing it.
 
-The test is NOT yet fully marked passed.
+The operator-side quote screen showed `0/5 done`, the customer name was missing, the service scope was incomplete, the total was US$0.00, and the screen explicitly stated that a customer name, price above $0, and completed missing details were required before sending. The `Send quote` control was faded/disabled and clicking `Ready to send` did not allow the quote to become sendable.
 
-What remains to verify:
-- The quote readiness/status guard actually prevents sending.
-- The missing-information state is surfaced to the operator.
-- A quote with $0 cannot be sent.
-- A quote with unresolved follow-ups cannot be sent.
-- A quote without customer name cannot be sent.
-- A quote must be explicitly marked `Ready to send` before the send endpoint accepts it.
+Conclusion: the incomplete quote is correctly prevented from being sent.
 
-Do not modify the quote yet unless the test instructs you to.
+Do not modify quote `TT-1236` as part of this test; it can remain as a historical incomplete-quote fixture.
 
 ### Immediate next action
 
-Continue TC-02 by looking at the **operator-side readiness/status controls** for quote `TT-1236`.
+Begin TC-03 with a fresh, complete customer inquiry.
 
-We are checking the functional guardrails, not wording or visual polish.
+We are checking the functional quote-creation path, not wording or visual polish.
 
 ---
 
@@ -1559,6 +1553,7 @@ At the time of this document update:
 - Full outbound quote delivery still needs explicit current-run verification.
 - Quote-to-job end-to-end still needs explicit verification.
 - Full core happy path still needs explicit verification.
+- TC-01 and TC-02 are now passed; continue with TC-03.
 - Onboarding is intentionally deferred.
 - Large future SaaS features are intentionally deferred.
 
