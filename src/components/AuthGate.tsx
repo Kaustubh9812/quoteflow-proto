@@ -11,9 +11,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   async function handleForgotPassword() {
     setError('');
+    setSuccess('');
     if (!email.trim()) {
       setError('Enter your email address.');
       return;
@@ -29,7 +31,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       if (response.error) {
         setError(response.error.message || 'Unable to send the reset email. Please try again.');
       } else {
-        setError('If an account exists for that email, a password reset link has been sent.');
+        setSuccess('If an account exists for that email, a password reset link has been sent.');
       }
     } catch {
       setError('Something went wrong. Please try again.');
@@ -41,15 +43,15 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
+    setSuccess('');
 
-    if (!email.trim() || !password) {
-      setError('Enter your email and password.');
+    if (mode === 'forgot') {
+      await handleForgotPassword();
       return;
     }
 
-    if (mode === 'forgot') {
-      event.preventDefault();
-      await handleForgotPassword();
+    if (!email.trim() || !password) {
+      setError('Enter your email and password.');
       return;
     }
 
@@ -142,14 +144,16 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="mb-8">
-              <p className="text-sm font-medium text-slate-500">{mode === 'sign-in' ? 'Welcome back' : 'Create your workspace'}</p>
+              <p className="text-sm font-medium text-slate-500">{mode === 'sign-in' ? 'Welcome back' : mode === 'forgot' ? 'Password recovery' : 'Create your workspace'}</p>
               <h2 className="mt-1 text-3xl font-semibold tracking-tight">
-                {mode === 'sign-in' ? 'Sign in to TaskTuck' : 'Start using TaskTuck'}
+                {mode === 'sign-in' ? 'Sign in to TaskTuck' : mode === 'forgot' ? 'Reset your TaskTuck password' : 'Start using TaskTuck'}
               </h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">
                 {mode === 'sign-in'
                   ? 'Use the email and password for your TaskTuck account.'
-                  : 'Create an account to keep your workspace private and persistent.'}
+                  : mode === 'forgot'
+                    ? 'Enter your account email and we will send you a secure reset link.'
+                    : 'Create an account to keep your workspace private and persistent.'}
               </p>
             </div>
 
@@ -199,6 +203,12 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                 </div>
               )}
 
+              {success && (
+                <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-5 text-emerald-700">
+                  {success}
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={busy}
@@ -215,12 +225,29 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                 onClick={() => {
                   setMode(mode === 'forgot' ? 'sign-in' : mode === 'sign-in' ? 'sign-up' : 'sign-in');
                   setError('');
+                  setSuccess('');
                 }}
                 className="font-semibold text-slate-950 underline underline-offset-4"
               >
                 {mode === 'forgot' ? 'Sign in' : mode === 'sign-in' ? 'Create an account' : 'Sign in'}
               </button>
             </div>
+
+            {mode === 'sign-in' && (
+              <div className="mt-3 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('forgot');
+                    setError('');
+                    setSuccess('');
+                  }}
+                  className="text-sm font-medium text-slate-500 underline underline-offset-4 hover:text-slate-950"
+                >
+                  Forgot your password?
+                </button>
+              </div>
+            )}
           </div>
         </section>
       </div>
