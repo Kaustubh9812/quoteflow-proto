@@ -1,9 +1,11 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { authClient } from '@/lib/auth-client';
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const { data: session, isPending } = authClient.useSession();
   const [mode, setMode] = useState<'sign-in' | 'sign-up' | 'forgot'>('sign-in');
   const [name, setName] = useState('');
@@ -93,6 +95,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       </main>
     );
   }
+
+  if (pathname === '/reset-password') return <>{children}</>;
 
   if (session?.user) return <>{children}</>;
 
