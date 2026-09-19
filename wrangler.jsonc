@@ -5,10 +5,11 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
-	"main": "vinext/server/fetch-handler",
+	"main": "src/worker.ts",
 	"preview_urls": true,
 	"vars": {
-		"BETTER_AUTH_URL": "https://task-tuck.com"
+		"BETTER_AUTH_URL": "https://task-tuck.com",
+    "TASKTUCK_INBOUND_DOMAIN": "task-tuck.com"
 	},
 	"routes": [
 		{
